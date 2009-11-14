@@ -1,0 +1,21 @@
+#! /bin/sh /usr/share/dpatch/dpatch-run
+## 06_add_openvpn.dpatch by Alexander Wirt <formorer@debian.org>
+##
+## All lines beginning with `## DP:' are a description of the patch.
+## DP: No description.
+
+@DPATCH@
+diff -urNad firehol-1.256~/firehol.sh firehol-1.256/firehol.sh
+--- firehol-1.256~/firehol.sh	2007-05-23 01:34:10.000000000 +0200
++++ firehol-1.256/firehol.sh	2007-09-05 22:54:33.000000000 +0200
+@@ -800,6 +800,10 @@
+ server_nxserver_ports="tcp/5000:5200"
+ client_nxserver_ports="default"
+ 
++# OpenVPN
++server_openvpn_ports="tcp/1194 udp/1194"
++client_openvpn_ports="default"
++
+ # Oracle database
+ server_oracle_ports="tcp/1521"
+ client_oracle_ports="default"

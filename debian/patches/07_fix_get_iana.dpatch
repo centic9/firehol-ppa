@@ -1,0 +1,28 @@
+#! /bin/sh /usr/share/dpatch/dpatch-run
+## 07_fix_get_iana.dpatch by Alexander Wirt <formorer@debian.org>
+##
+## All lines beginning with `## DP:' are a description of the patch.
+## DP: No description.
+
+@DPATCH@
+diff -urNad firehol-1.256~/get-iana.sh firehol-1.256/get-iana.sh
+--- firehol-1.256~/get-iana.sh	2007-05-22 23:34:10.000000000 +0000
++++ firehol-1.256/get-iana.sh	2008-07-18 20:57:36.000000000 +0000
+@@ -51,7 +51,7 @@
+ #
+ 
+ IPV4_ADDRESS_SPACE_URL="http://www.iana.org/assignments/ipv4-address-space"
+-IANA_RESERVED="IANA - Reserved"
++IANA_RESERVED="\(IANA\|Future use\).*\(RESERVED\|UNALLOCATED\)"
+ 
+ tempfile="/tmp/iana.$$.$RANDOM"
+ 
+@@ -72,7 +72,7 @@
+ echo >&2
+ 
+ wget -O - --proxy=off "${IPV4_ADDRESS_SPACE_URL}"	|\
+-	grep "${IANA_RESERVED}"				|\
++	grep -e "${IANA_RESERVED}"			|\
+ 	cut -d ' ' -f 1					|\
+ (
+ 	

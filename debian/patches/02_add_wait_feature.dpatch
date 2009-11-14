@@ -1,0 +1,64 @@
+#! /bin/sh /usr/share/dpatch/dpatch-run
+## 02_add_wait_feature.dpatch by Alexander Wirt <formorer@debian.org>
+##
+## All lines beginning with `## DP:' are a description of the patch.
+## DP: No description.
+
+@DPATCH@
+diff -urNad firehol-1.256~/firehol.sh firehol-1.256/firehol.sh
+--- firehol-1.256~/firehol.sh	2007-05-23 01:34:10.000000000 +0200
++++ firehol-1.256/firehol.sh	2007-08-30 11:12:33.000000000 +0200
+@@ -5274,6 +5274,38 @@
+ 	test ${FIREHOL_CONF_SHOW} -eq 1 && show_work_realcmd 3
+ }
+ 
++wait_for_interface() {
++	local iface=$1; shift
++	local timeout=60
++
++	if [ -n "$1" ]; then
++		timeout=$1
++	fi
++
++	local start=`date +%s`
++	local found=0
++
++	while [ "`date +%s`" -lt $(($start+$timeout)) -a $found -eq 0 ]
++	do
++		local addr=`ip addr show $iface 2> /dev/null | awk '$1 ~ /^inet$/ {print $2}'`
++		if [ -n "$addr" ]
++		then
++			found=1
++		fi
++		if [ $found -eq 0 ]
++		then
++			sleep 0.5
++		fi
++	done
++
++	if [ $found -eq 1 ]
++	then
++		# the interface is up
++		return 0
++	else
++		return 1
++	fi
++}
+ 
+ 
+ # ------------------------------------------------------------------------------
+@@ -6628,6 +6660,14 @@
+ # ------------------------------------------------------------------------------
+ # Run the configuration file.
+ 
++if [ -n "$WAIT_FOR_IFACE" ]
++then
++	for i in "$WAIT_FOR_IFACE"
++	do
++		wait_for_interface $i
++	done
++fi
++
+ enable -n trap			# Disable the trap buildin shell command.
+ enable -n exit			# Disable the exit buildin shell command.
+ source ${FIREHOL_TMP} "$@"	# Run the configuration as a normal script.

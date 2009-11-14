@@ -1,0 +1,22 @@
+#! /bin/sh /usr/share/dpatch/dpatch-run
+## 05_fix_msnport.dpatch by Alexander Wirt <formorer@debian.org>
+##
+## All lines beginning with `## DP:' are a description of the patch.
+## DP: No description.
+
+@DPATCH@
+diff -urNad firehol-1.256~/firehol.sh firehol-1.256/firehol.sh
+--- firehol-1.256~/firehol.sh	2007-05-23 01:34:10.000000000 +0200
++++ firehol-1.256/firehol.sh	2007-09-01 08:43:32.000000000 +0200
+@@ -764,7 +764,10 @@
+ # because the mms module is not there:
+ # ALL_SHOULD_ALSO_RUN="${ALL_SHOULD_ALSO_RUN} mms"
+ 
+-server_msn_ports="tcp/6891"
++server_msnp_ports="tcp/6891"
++client_msnp_ports="default"
++
++server_msn_ports="tcp/1863 udp/1863"
+ client_msn_ports="default"
+ 
+ server_mysql_ports="tcp/3306"
