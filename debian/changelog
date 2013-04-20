@@ -1,9 +1,3 @@
-firehol (1.296-0ubuntu0~ppa1) precise; urgency=low
-
-  * Backport to precise.
-
- -- Dominik Stadler (Ubuntu key) <dominik.stadler@gmx.at>  Mon, 29 Apr 2013 20:10:06 +0200
-
 firehol (1.296-1) unstable; urgency=low
 
   * New maintainer (Closes: #660524).
