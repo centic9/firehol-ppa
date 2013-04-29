@@ -1,14 +1,11 @@
-#! /bin/sh /usr/share/dpatch/dpatch-run
-## 01_wizard_support_vlan.dpatch by Alexander Wirt <formorer@debian.org>
-##
-## All lines beginning with `## DP:' are a description of the patch.
-## DP: No description.
+Description: vlan interfaces support for the wizard
+Origin: debian
+Author: Alexander Wirt <formorer@debian.org>
+Last-Update: 2007-08-30
 
-@DPATCH@
-diff -urNad firehol-1.256~/firehol.sh firehol-1.256/firehol.sh
---- firehol-1.256~/firehol.sh	2007-05-23 01:34:10.000000000 +0200
-+++ firehol-1.256/firehol.sh	2007-08-30 09:45:25.000000000 +0200
-@@ -6204,7 +6204,7 @@
+--- a/firehol.sh
++++ b/firehol.sh
+@@ -6636,7 +6636,7 @@
  		echo
  	}
  	

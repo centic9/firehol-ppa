@@ -1,0 +1,9 @@
+Document: firehol
+Title: FireHOL
+Author: Costa Tsaousis
+Abstract: This manual documents how to use the FireHOL firewall builder
+Section: Network/Monitoring
+
+Format: HTML
+Index: /usr/share/doc/firehol/html/index.html
+Files: /usr/share/doc/firehol/html/*.html /usr/share/doc/firehol/html/css.css

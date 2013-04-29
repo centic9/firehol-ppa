@@ -1,0 +1,24 @@
+Description: debianization
+ Meant to maintain a minimal debian/rules, to fix warnings,
+ to address Debian specific stuff in general.
+Author: Jerome Benoit <calculus@rezozer.net>
+Last-Update: 2013-03-11
+
+--- /dev/null
++++ b/Makefile
+@@ -0,0 +1,15 @@
++default:
++
++build:
++
++install: install-sbin install-admin install-doc-html
++
++install-sbin:
++	install -m 755 firehol.sh $(DESTDIR)/sbin/firehol
++
++install-admin:
++	install -m 755 adblock.sh $(DESTDIR)/usr/share/doc/firehol/admin
++	install -m 755 get-iana.sh $(DESTDIR)/usr/share/doc/firehol/admin
++
++install-doc-html:
++	install -m 644 doc/*.html doc/*.css $(DESTDIR)/usr/share/doc/firehol/html/

@@ -1,14 +1,11 @@
-#! /bin/sh /usr/share/dpatch/dpatch-run
-## 02_add_wait_feature.dpatch by Alexander Wirt <formorer@debian.org>
-##
-## All lines beginning with `## DP:' are a description of the patch.
-## DP: No description.
+Description: wait feature
+Origin: debian
+Author: Alexander Wirt <formorer@debian.org>
+Last-Update: 2007-08-30
 
-@DPATCH@
-diff -urNad firehol-1.256~/firehol.sh firehol-1.256/firehol.sh
---- firehol-1.256~/firehol.sh	2007-05-23 01:34:10.000000000 +0200
-+++ firehol-1.256/firehol.sh	2007-08-30 11:12:33.000000000 +0200
-@@ -5274,6 +5274,38 @@
+--- a/firehol.sh
++++ b/firehol.sh
+@@ -5703,6 +5703,38 @@
  	test ${FIREHOL_CONF_SHOW} -eq 1 && show_work_realcmd 3
  }
  
@@ -47,7 +44,7 @@ diff -urNad firehol-1.256~/firehol.sh firehol-1.256/firehol.sh
  
  
  # ------------------------------------------------------------------------------
-@@ -6628,6 +6660,14 @@
+@@ -7074,6 +7106,14 @@
  # ------------------------------------------------------------------------------
  # Run the configuration file.
  

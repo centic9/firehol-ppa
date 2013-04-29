@@ -1,0 +1,18 @@
+Description: openvpn service
+Origin: debian
+Author: Alexander Wirt <formorer@debian.org>
+Last-Update: 2007-09-05
+
+--- a/firehol.sh
++++ b/firehol.sh
+@@ -953,6 +953,10 @@
+ server_nxserver_ports="tcp/5000:5200"
+ client_nxserver_ports="default"
+ 
++# OpenVPN
++server_openvpn_ports="tcp/1194 udp/1194"
++client_openvpn_ports="default"
++
+ # Oracle database
+ server_oracle_ports="tcp/1521"
+ client_oracle_ports="default"

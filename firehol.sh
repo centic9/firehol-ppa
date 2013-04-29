@@ -10,7 +10,7 @@
 #
 # config: /etc/firehol/firehol.conf
 #
-# $Id: firehol.sh,v 1.273 2008/07/31 00:46:41 ktsaou Exp $
+# $Id: firehol.sh,v 1.296 2013/01/06 23:49:08 ktsaou Exp $
 #
 
 # Make sure only root can run us.
@@ -163,6 +163,7 @@ which_cmd TOUCH_CMD touch
 which_cmd TR_CMD tr
 which_cmd UNAME_CMD uname
 which_cmd UNIQ_CMD uniq
+which_cmd LOGGER_CMD logger
 
 # Special commands
 pager_cmd() {
@@ -200,6 +201,39 @@ zcat_cmd() {
 	return 1
 }
 
+# Concurrent run control
+FIREHOL_LOCK_FILE="/var/run/firehol.lck"
+
+# Time in secs to consider a lock stale
+FIREHOL_LOCK_FILE_TIMEOUT=600
+
+firehol_concurrent_run_lock() {
+	require_cmd -n lockfile
+	
+	if [ -f "${FIREHOL_LOCK_FILE}" ]
+	then
+		echo >&2 "FireHOL is already running. Waiting for the other process to exit..."
+	fi
+	
+	if [ -z "${LOCKFILE_CMD}" ]
+	then
+		local c=0
+		while [ -f "${FIREHOL_LOCK_FILE}" ]
+		do
+			c=$[c + 1]
+			test $c -gt ${FIREHOL_LOCK_FILE_TIMEOUT} && break
+			sleep 1
+		done
+		
+		touch "${FIREHOL_LOCK_FILE}"
+		
+	else
+		${LOCKFILE_CMD} -1 -r ${FIREHOL_LOCK_FILE_TIMEOUT} -l ${FIREHOL_LOCK_FILE_TIMEOUT} "${FIREHOL_LOCK_FILE}"
+	fi
+	
+	return 0
+}
+
 # Make sure our generated files cannot be accessed by anyone else.
 umask 077
 
@@ -209,7 +243,7 @@ ${RENICE_CMD} 10 $$ >/dev/null 2>/dev/null
 # Find our minor version
 firehol_minor_version() {
 ${CAT_CMD} <<"EOF" | ${CUT_CMD} -d ' ' -f 3 | ${CUT_CMD} -d '.' -f 2
-$Id: firehol.sh,v 1.273 2008/07/31 00:46:41 ktsaou Exp $
+$Id: firehol.sh,v 1.296 2013/01/06 23:49:08 ktsaou Exp $
 EOF
 }
 
@@ -245,6 +279,7 @@ FIREHOL_OUTPUT="${FIREHOL_DIR}/firehol-out.sh"
 FIREHOL_SAVED="${FIREHOL_DIR}/firehol-save.sh"
 FIREHOL_TMP="${FIREHOL_DIR}/firehol-tmp.sh"
 
+# Redhat like status info for startup script
 FIREHOL_LOCK_DIR="/var/lock/subsys"
 test ! -d "${FIREHOL_LOCK_DIR}" && FIREHOL_LOCK_DIR="/var/lock"
 
@@ -265,23 +300,79 @@ FIREHOL_AUTOSAVE=
 # WHY:
 # Even a CTRL-C will call this and we will not leave temp files.
 # Also, if a configuration file breaks, we will detect this too.
+FIREHOL_ACTIVATED_SUCCESSFULLY=0
+FIREHOL_SYSLOG_FACILITY="daemon"
+FIREHOL_NOTIFICATION_PROGRAM=""
+
+syslog() {
+	local p="$1"; shift
+	
+	"${LOGGER_CMD}" -p ${FIREHOL_SYSLOG_FACILITY}.$p -t "FireHOL[$$]" "${@}"
+	return 0
+}
 
 firehol_exit() {
-	if [ -f "${FIREHOL_SAVED}" ]
+	local restored="NO"
+	if [ -f "${FIREHOL_SAVED}" -a "${FIREHOL_MODE}" = "START" ]
 	then
 		echo
 		echo -n $"FireHOL: Restoring old firewall:"
 		iptables-restore <"${FIREHOL_SAVED}"
 		if [ $? -eq 0 ]
 		then
+			local restored="OK"
 			success $"FireHOL: Restoring old firewall:"
 		else
+			local restored="FAILED"
 			failure $"FireHOL: Restoring old firewall:"
 		fi
 		echo
 	fi
 	
+	# remove the temporary directory created for this session
 	test -d "${FIREHOL_DIR}" && ${RM_CMD} -rf "${FIREHOL_DIR}"
+	
+	# syslog
+	local result=
+	local notify=0
+	case "${FIREHOL_MODE}" in
+		START)	if [ ${FIREHOL_ACTIVATED_SUCCESSFULLY} -eq 0 ]
+			then
+				syslog emerg "FAILED to activate the firewall from ${FIREHOL_CONFIG}. Last good firewall restoration: ${restored}."
+				local result="FAILED"
+			else
+				syslog info "Successfully activated new firewall from ${FIREHOL_CONFIG}."
+				local result="OK"
+			fi
+			local notify=1
+			;;
+		
+		STOP)	syslog emerg "Firewall has been stopped. Policy is ACCEPT EVERYTHING!"
+			local notify=1
+			;;
+			
+		PANIC)	syslog emerg "PANIC! Machine has been locked. Policy is DROP EVERYTHING!"
+			local notify=1
+			;;
+		
+		*)	# do nothing for the rest
+			local notify=0
+			;;
+	esac
+	
+	# do we have to run a program?
+	if [ ${notify} -eq 1 ]
+	then
+		if [ ! -z "${FIREHOL_NOTIFICATION_PROGRAM}" -a -x "${FIREHOL_NOTIFICATION_PROGRAM}" ]
+		then
+			# we just fork it, so that it will not depend on terminal conditions
+			"${FIREHOL_NOTIFICATION_PROGRAM}" "${FIREHOL_CONFIG}" "${result}" "${restored}" "${work_error}" "${work_runtime_error}" >/dev/null 2>&1 </dev/null &
+		fi
+	fi
+	
+	# remove the lock
+	test -f "${FIREHOL_LOCK_FILE}" && rm -f "${FIREHOL_LOCK_FILE}"
+	
 	return 0
 }
 
@@ -453,8 +544,9 @@ load_ips() {
 # Optimized (CIDR) by Marc 'HE' Brockschmidt <marc@marcbrockschmidt.de>
 # Further optimized and reduced by http://www.vergenet.net/linux/aggregate/
 # The supplied get-iana.sh uses 'aggregate-flim' if it finds it in the path.
-RESERVED_IPS="0.0.0.0/7 2.0.0.0/8 5.0.0.0/8 10.0.0.0/8 14.0.0.0/8 23.0.0.0/8 27.0.0.0/8 31.0.0.0/8 36.0.0.0/7 39.0.0.0/8 42.0.0.0/8 46.0.0.0/8 49.0.0.0/8 50.0.0.0/8 100.0.0.0/6 104.0.0.0/5 127.0.0.0/8 175.0.0.0/8 176.0.0.0/5 184.0.0.0/7 197.0.0.0/8 223.0.0.0/8 240.0.0.0/4 "
-load_ips RESERVED_IPS "${RESERVED_IPS}" 90 "Run the supplied get-iana.sh script to generate this file." require-file
+RESERVED_IPS="0.0.0.0/8 10.0.0.0/8 127.0.0.0/8 240.0.0.0/4 "
+#load_ips RESERVED_IPS "${RESERVED_IPS}" 90 "Run the supplied get-iana.sh script to generate this file." require-file
+load_ips RESERVED_IPS "${RESERVED_IPS}" 0
 
 # Private IPv4 address space
 # Suggested by Fco.Felix Belmonte <ffelix@gescosoft.com>
@@ -547,7 +639,6 @@ FIREHOL_LINEID="INIT"
 # Suggested by Fco.Felix Belmonte <ffelix@gescosoft.com>
 # Note that each of the complex services
 # may add to this variable the kernel modules it requires.
-# See rules_ftp() bellow for an example.
 FIREHOL_KERNEL_MODULES=""
 #
 # In the configuration file you can write:
@@ -573,26 +664,17 @@ ALL_SHOULD_ALSO_RUN=
 # ------------------------------------------------------------------------------
 # Various Defaults
 
-# If set to 1, we are just going to present the resulting firewall instead of
-# installing it.
-# It can be changed on the command line
-FIREHOL_DEBUG=0
+# Valid modes:
+# START, DEBUG, EXPLAIN, WIZARD, STOP, PANIC
+FIREHOL_MODE="NONE"
 
 # If set to 1, the firewall will be saved for normal iptables processing.
-# It can be changed on the command line
+# Valid only for FIREHOL_MODE="START"
 FIREHOL_SAVE=0
 
 # If set to 1, the firewall will be restored if you don't commit it.
-# It can be changed on the command line
-FIREHOL_TRY=1
-
-# If set to 1, FireHOL enters interactive mode to answer questions.
-# It can be changed on the command line
-FIREHOL_EXPLAIN=0
-
-# If set to 1, FireHOL enters a wizard mode to help the user build a firewall.
-# It can be changed on the command line
-FIREHOL_WIZARD=0
+# Valid only for FIREHOL_MODE="START"
+FIREHOL_TRY=0
 
 # If set to 0, FireHOL will not try to load the required kernel modules.
 # It can be set in the configuration file.
@@ -621,8 +703,8 @@ work_function="Initializing"
 # ------------------------------------------------------------------------------
 # Keep status information
 
-# 0 = no errors, 1 = there were errors in the script
-work_final_status=0
+# 0 = no errors, >0 = there were errors in the script
+work_runtime_error=0
 
 # This variable is used for generating dynamic chains when needed for
 # combined negative statements (AND) implied by the "not" parameter
@@ -658,6 +740,11 @@ FIREHOL_SERVICES_API="1"
 
 server_AH_ports="51/any"
 client_AH_ports="any"
+
+# Check http://wiki.zmanda.com/index.php/Configuration_with_iptables
+server_amanda_ports="udp/10080"
+client_amanda_ports="default"
+helper_amanda="amanda"
 
 # Debian package proxy
 server_aptproxy_ports="tcp/9999"
@@ -719,6 +806,11 @@ client_echo_ports="default"
 server_finger_ports="tcp/79"
 client_finger_ports="default"
 
+server_ftp_ports="tcp/21"
+client_ftp_ports="default"
+helper_ftp="ftp"
+ALL_SHOULD_ALSO_RUN="${ALL_SHOULD_ALSO_RUN} ftp"
+
 # giFT modules' ports
 # Gnutella  = tcp/4302
 # FastTrack = tcp/1214
@@ -736,9 +828,11 @@ client_gkrellmd_ports="default"
 
 server_GRE_ports="47/any"
 client_GRE_ports="any"
+helper_GRE="proto_gre"
 
-server_h323_ports="tcp/1720 tcp/1731"
+server_h323_ports="tcp/1720"
 client_h323_ports="default"
+helper_h323="h323"
 
 # We assume heartbeat uses ports in the range 690 to 699
 server_heartbeat_ports="udp/690:699"
@@ -778,19 +872,25 @@ client_imaps_ports="default"
 
 server_irc_ports="tcp/6667"
 client_irc_ports="default"
-require_irc_modules="ip_conntrack_irc"
-require_irc_nat_modules="ip_nat_irc"
+helper_irc="irc"
 ALL_SHOULD_ALSO_RUN="${ALL_SHOULD_ALSO_RUN} irc"
 
 # for IPSec Key negotiation
 server_isakmp_ports="udp/500"
 client_isakmp_ports="any"
 
+# IPSec Nat Traversal
+server_ipsecnatt_ports="udp/4500"
+client_ipsecnatt_ports="any" 
+
 server_jabber_ports="tcp/5222 tcp/5223"
 client_jabber_ports="default"
 
 server_jabberd_ports="tcp/5222 tcp/5223 tcp/5269"
 client_jabberd_ports="default"
+
+server_l2tp_ports="udp/1701"
+client_l2tp_ports="any"
 
 server_ldap_ports="tcp/389"
 client_ldap_ports="default"
@@ -809,8 +909,7 @@ client_ms_ds_ports="default"
 
 server_mms_ports="tcp/1755 udp/1755"
 client_mms_ports="default"
-require_mms_modules="ip_conntrack_mms"
-require_mms_nat_modules="ip_nat_mms"
+helper_mms="mms"
 # this will produce warnings on most distribution
 # because the mms module is not there:
 # ALL_SHOULD_ALSO_RUN="${ALL_SHOULD_ALSO_RUN} mms"
@@ -871,6 +970,11 @@ client_portmap_ports="any"
 server_postgres_ports="tcp/5432"
 client_postgres_ports="default"
 
+server_pptp_ports="tcp/1723"
+client_pptp_ports="default"
+helper_pptp="pptp proto_gre"
+# ALL_SHOULD_ALSO_RUN="${ALL_SHOULD_ALSO_RUN} pptp"
+
 # Privacy Proxy
 server_privoxy_ports="tcp/8118"
 client_privoxy_ports="default"
@@ -899,8 +1003,13 @@ client_rsync_ports="default"
 server_rtp_ports="udp/10000:20000"
 client_rtp_ports="any"
 
+server_sane_ports="tcp/6566"
+client_sane_ports="default"
+helper_sane="sane"
+
 server_sip_ports="udp/5060"
 client_sip_ports="5060 default"
+helper_sip="sip"
 
 server_socks_ports="tcp/1080 udp/1080"
 client_socks_ports="default"
@@ -942,6 +1051,10 @@ client_syslog_ports="syslog default"
 
 server_telnet_ports="tcp/23"
 client_telnet_ports="default"
+
+server_tftp_ports="udp/69"
+client_tftp_ports="default"
+helper_tftp="tftp"
 
 server_time_ports="tcp/37 udp/37"
 client_time_ports="default"
@@ -1228,37 +1341,39 @@ rules_samba() {
 
 
 # --- PPTP --------------------------------------------------------------------
-
-rules_pptp() {
-        local mychain="${1}"; shift
-	local type="${1}"; shift
-	
-	local in=in
-	local out=out
-	if [ "${type}" = "client" ]
-	then
-		in=out
-		out=in
-	fi
-	
-	local client_ports="${DEFAULT_CLIENT_PORTS}"
-	if [ "${type}" = "client" -a "${work_cmd}" = "interface" ]
-	then
-		client_ports="${LOCAL_CLIENT_PORTS}"
-	fi
-	
-	# ----------------------------------------------------------------------
-	
-	set_work_function "Setting up rules for PPTP/initial connection (${type})"
-	rule ${in}          action "$@" chain "${in}_${mychain}"  proto "tcp" sport "${client_ports}" dport "1723" state NEW,ESTABLISHED || return 1
-	rule ${out} reverse action "$@" chain "${out}_${mychain}" proto "tcp" sport "${client_ports}" dport "1723" state ESTABLISHED     || return 1
-	
-	set_work_function "Setting up rules for PPTP/tunnel GRE traffic (${type})"
-	rule ${in}          action "$@" chain "${in}_${mychain}"  proto "47"	|| return 1
-	rule ${out} reverse action "$@" chain "${out}_${mychain}" proto "47"	|| return 1
-	
-	return 0
-}
+# THIS IS OLD
+# THE NEW ONE USES THE KERNEL HELPER TO DO IT, AND THEREFORE IS A SIMPLE SERVICE
+#
+#rules_pptp() {
+#        local mychain="${1}"; shift
+#	local type="${1}"; shift
+#	
+#	local in=in
+#	local out=out
+#	if [ "${type}" = "client" ]
+#	then
+#		in=out
+#		out=in
+#	fi
+#	
+#	local client_ports="${DEFAULT_CLIENT_PORTS}"
+#	if [ "${type}" = "client" -a "${work_cmd}" = "interface" ]
+#	then
+#		client_ports="${LOCAL_CLIENT_PORTS}"
+#	fi
+#	
+#	# ----------------------------------------------------------------------
+#	
+#	set_work_function "Setting up rules for PPTP/initial connection (${type})"
+#	rule ${in}          action "$@" chain "${in}_${mychain}"  proto "tcp" sport "${client_ports}" dport "1723" state NEW,ESTABLISHED || return 1
+#	rule ${out} reverse action "$@" chain "${out}_${mychain}" proto "tcp" sport "${client_ports}" dport "1723" state ESTABLISHED     || return 1
+#	
+#	set_work_function "Setting up rules for PPTP/tunnel GRE traffic (${type})"
+#	rule ${in}          action "$@" chain "${in}_${mychain}"  proto "47"	|| return 1
+#	rule ${out} reverse action "$@" chain "${out}_${mychain}" proto "47"	|| return 1
+#	
+#	return 0
+#}
 
 
 # --- NFS ----------------------------------------------------------------------
@@ -1450,7 +1565,7 @@ rules_nis() {
 			dst="dst ${x}"
 		fi
 		
-		if [ ! -z "${server_yppasswd_ports}" ]
+		if [ ! -z "${server_yppasswdd_ports}" ]
 		then
 			set_work_function "Processing yppasswd rules for server '${x}'"
 			rules_custom "${mychain}" "${type}" nis-yppasswd "${server_yppasswdd_ports}" "500:65535" "${action}" $dst "$@"
@@ -1472,171 +1587,184 @@ rules_nis() {
 
 
 # --- AMANDA -------------------------------------------------------------------
-FIREHOL_AMANDA_PORTS="850:859"
-
-rules_amanda() {
-        local mychain="${1}"; shift
-	local type="${1}"; shift
-	
-	local in=in
-	local out=out
-	if [ "${type}" = "client" ]
-	then
-		in=out
-		out=in
-	fi
-	
-	local client_ports="${DEFAULT_CLIENT_PORTS}"
-	if [ "${type}" = "client" -a "${work_cmd}" = "interface" ]
-	then
-		client_ports="${LOCAL_CLIENT_PORTS}"
-	fi
-	
-	# ----------------------------------------------------------------------
-	
-	set_work_function "*** AMANDA: See http://amanda.sourceforge.net/fom-serve/cache/139.html"
-	
-	
-	set_work_function "Setting up rules for initial amanda server-to-client connection"
-	rule ${out}        action "$@" chain "${out}_${mychain}" proto "udp" dport 10080 state NEW,ESTABLISHED || return 1
-	rule ${in} reverse action "$@" chain "${in}_${mychain}"  proto "udp" dport 10080 state ESTABLISHED     || return 1
-	
-	
-	set_work_function "Setting up rules for amanda data exchange client-to-server"
-	rule ${in}          action "$@" chain "${in}_${mychain}"  proto "tcp udp" dport "${FIREHOL_AMANDA_PORTS}" state NEW,ESTABLISHED || return 1
-	rule ${out} reverse action "$@" chain "${out}_${mychain}" proto "tcp udp" dport "${FIREHOL_AMANDA_PORTS}" state ESTABLISHED     || return 1
-	
-	return 0
-}
+# THIS IS OLD
+# THE NEW ONE USES THE KERNEL HELPER TO DO IT, AND THEREFORE IS A SIMPLE SERVICE
+#
+#FIREHOL_AMANDA_PORTS="850:859"
+#
+#rules_amanda() {
+#	local mychain="${1}"; shift
+#	local type="${1}"; shift
+#	
+#	local in=in
+#	local out=out
+#	if [ "${type}" = "client" ]
+#	then
+#		in=out
+#		out=in
+#	fi
+#	
+#	local client_ports="${DEFAULT_CLIENT_PORTS}"
+#	if [ "${type}" = "client" -a "${work_cmd}" = "interface" ]
+#	then
+#		client_ports="${LOCAL_CLIENT_PORTS}"
+#	fi
+#	
+#	# ----------------------------------------------------------------------
+#	
+#	set_work_function "*** AMANDA: See http://amanda.sourceforge.net/fom-serve/cache/139.html"
+#	
+#	
+#	set_work_function "Setting up rules for initial amanda server-to-client connection"
+#	rule ${out}        action "$@" chain "${out}_${mychain}" proto "udp" dport 10080 state NEW,ESTABLISHED || return 1
+#	rule ${in} reverse action "$@" chain "${in}_${mychain}"  proto "udp" dport 10080 state ESTABLISHED     || return 1
+#	
+#	
+#	set_work_function "Setting up rules for amanda data exchange client-to-server"
+#	rule ${in}          action "$@" chain "${in}_${mychain}"  proto "tcp udp" dport "${FIREHOL_AMANDA_PORTS}" state NEW,ESTABLISHED || return 1
+#	rule ${out} reverse action "$@" chain "${out}_${mychain}" proto "tcp udp" dport "${FIREHOL_AMANDA_PORTS}" state ESTABLISHED     || return 1
+#	
+#	return 0
+#}
 
 # --- FTP ----------------------------------------------------------------------
-
-ALL_SHOULD_ALSO_RUN="${ALL_SHOULD_ALSO_RUN} ftp"
-
-rules_ftp() {
-        local mychain="${1}"; shift
-	local type="${1}"; shift
-	
-	local in=in
-	local out=out
-	if [ "${type}" = "client" ]
-	then
-		in=out
-		out=in
-	fi
-	
-	local client_ports="${DEFAULT_CLIENT_PORTS}"
-	if [ "${type}" = "client" -a "${work_cmd}" = "interface" ]
-	then
-		client_ports="${LOCAL_CLIENT_PORTS}"
-	fi
-	
-	# For an explanation of how FTP connections work, see
-	# http://slacksite.com/other/ftp.html
-	
-	# ----------------------------------------------------------------------
-	
-	# allow new and established incoming, and established outgoing
-	# accept port ftp new connections
-	set_work_function "Setting up rules for initial FTP connection ${type}"
-	rule ${in}          action "$@" chain "${in}_${mychain}"  proto tcp sport "${client_ports}" dport ftp state NEW,ESTABLISHED || return 1
-	rule ${out} reverse action "$@" chain "${out}_${mychain}" proto tcp sport "${client_ports}" dport ftp state ESTABLISHED     || return 1
-	
-	# Active FTP
-	# send port ftp-data related connections
-	set_work_function "Setting up rules for Active FTP ${type}"
-	rule ${out} reverse action "$@" chain "${out}_${mychain}" proto tcp sport "${client_ports}" dport ftp-data state ESTABLISHED,RELATED || return 1
-	rule ${in}          action "$@" chain "${in}_${mychain}"  proto tcp sport "${client_ports}" dport ftp-data state ESTABLISHED         || return 1
-	
-	# ----------------------------------------------------------------------
-	
-	# A hack for Passive FTP only
-	local s_client_ports="${DEFAULT_CLIENT_PORTS}"
-	local c_client_ports="${DEFAULT_CLIENT_PORTS}"
-	
-	if [ "${type}" = "client" -a "${work_cmd}" = "interface" ]
-	then
-		c_client_ports="${LOCAL_CLIENT_PORTS}"
-	elif [ "${type}" = "server" -a "${work_cmd}" = "interface" ]
-	then
-		s_client_ports="${LOCAL_CLIENT_PORTS}"
-	fi
-	
-	# Passive FTP
-	# accept high-ports related connections
-	set_work_function "Setting up rules for Passive FTP ${type}"
-	rule ${in}          action "$@" chain "${in}_${mychain}"  proto tcp sport "${c_client_ports}" dport "${s_client_ports}" state ESTABLISHED,RELATED || return 1
-	rule ${out} reverse action "$@" chain "${out}_${mychain}" proto tcp sport "${c_client_ports}" dport "${s_client_ports}" state ESTABLISHED         || return 1
-	
-	require_kernel_module ip_conntrack_ftp
-	test ${FIREHOL_NAT} -eq 1 && require_kernel_module ip_nat_ftp
-	
-	return 0
-}
+# THIS IS OLD
+# THE NEW ONE USES THE KERNEL HELPER TO DO IT, AND THEREFORE IS A SIMPLE SERVICE
+#
+#ALL_SHOULD_ALSO_RUN="${ALL_SHOULD_ALSO_RUN} ftp"
+#
+#rules_ftp() {
+#        local mychain="${1}"; shift
+#	local type="${1}"; shift
+#	
+#	local in=in
+#	local out=out
+#	if [ "${type}" = "client" ]
+#	then
+#		in=out
+#		out=in
+#	fi
+#	
+#	local client_ports="${DEFAULT_CLIENT_PORTS}"
+#	if [ "${type}" = "client" -a "${work_cmd}" = "interface" ]
+#	then
+#		client_ports="${LOCAL_CLIENT_PORTS}"
+#	fi
+#	
+#	# For an explanation of how FTP connections work, see
+#	# http://slacksite.com/other/ftp.html
+#	
+#	# ----------------------------------------------------------------------
+#	
+#	# allow new and established incoming, and established outgoing
+#	# accept port ftp new connections
+#	set_work_function "Setting up rules for initial FTP connection ${type}"
+#	rule ${in}          action "$@" chain "${in}_${mychain}"  proto tcp sport "${client_ports}" dport ftp state NEW,ESTABLISHED || return 1
+#	rule ${out} reverse action "$@" chain "${out}_${mychain}" proto tcp sport "${client_ports}" dport ftp state ESTABLISHED     || return 1
+#	
+#	set_work_function "Match anything related to the kernel ftp helper"
+#	rule ${in}          action "$@" chain "${in}_${mychain}"  custom "-m helper --helper ftp" state ESTABLISHED,RELATED || return 1
+#	rule ${out} reverse action "$@" chain "${out}_${mychain}" custom "-m helper --helper ftp" state ESTABLISHED,RELATED || return 1
+#	
+# this is old code - replaced by the two helper statements above
+#	# Active FTP
+#	# send port ftp-data related connections
+#	set_work_function "Setting up rules for Active FTP ${type}"
+#	rule ${out} reverse action "$@" chain "${out}_${mychain}" proto tcp sport "${client_ports}" dport ftp-data state ESTABLISHED,RELATED || return 1
+#	rule ${in}          action "$@" chain "${in}_${mychain}"  proto tcp sport "${client_ports}" dport ftp-data state ESTABLISHED         || return 1
+#	
+#	# ----------------------------------------------------------------------
+#	
+#	# A hack for Passive FTP only
+#	local s_client_ports="${DEFAULT_CLIENT_PORTS}"
+#	local c_client_ports="${DEFAULT_CLIENT_PORTS}"
+#	
+#	if [ "${type}" = "client" -a "${work_cmd}" = "interface" ]
+#	then
+#		c_client_ports="${LOCAL_CLIENT_PORTS}"
+#	elif [ "${type}" = "server" -a "${work_cmd}" = "interface" ]
+#	then
+#		s_client_ports="${LOCAL_CLIENT_PORTS}"
+#	fi
+#	
+#	# Passive FTP
+#	# accept high-ports related connections
+#	set_work_function "Setting up rules for Passive FTP ${type}"
+#	rule ${in}          action "$@" chain "${in}_${mychain}"  proto tcp sport "${c_client_ports}" dport "${s_client_ports}" state ESTABLISHED,RELATED || return 1
+#	rule ${out} reverse action "$@" chain "${out}_${mychain}" proto tcp sport "${c_client_ports}" dport "${s_client_ports}" state ESTABLISHED         || return 1
+#	
+#	require_kernel_module nf_conntrack_ftp
+#	test ${FIREHOL_NAT} -eq 1 && require_kernel_module nf_nat_ftp
+#	
+#	return 0
+#}
 
 
 # --- TFTP ---------------------------------------------------------------------
+# THIS IS OLD
+# THE NEW ONE USES THE KERNEL HELPER TO DO IT, AND THEREFORE IS A SIMPLE SERVICE
+#
 # Written by: Goetz Bock <bock@blacknet.de>
-
-rules_tftp() {
-	local mychain="${1}"; shift
-	local type="${1}"; shift
-	
-	local in=in
-	local out=out
-	if [ "${type}" = "client" ]
-	then
-		in=out
-		out=in
-	fi
-	
-	local client_ports="${DEFAULT_CLIENT_PORTS}"
-	if [ "${type}" = "client" -a "${work_cmd}" = "interface" ]
-	then
-		client_ports="${LOCAL_CLIENT_PORTS}"
-	fi
-	
-	# ---------------------------------------------------------------------
-	# TFTP is a broken protokol. It works like this:
-	#
-	# 1. The client sends from a high port (a) to the server's tftp port an
-	#    udp packet with "give me file 'bla'".
-	#
-	# 2. The server replies from a high port (b) to the highport the client
-	#    used (a) with "this is part 0 if your file"
-	#
-	# 3. The client now has to send a reply (from his highport a) to the
-	#    servers high port (b): "got part 0, send next part 1".
-	#
-	# 4. repeat 2. and 3. till file transmitted
-	
-	# allow the initial TFTP connection
-	set_work_function "Setting up rules for initial TFTP connection (${type})"
-	rule ${in}          action "$@" chain "${in}_${mychain}"  proto "udp" sport "${client_ports}" dport tftp state NEW,ESTABLISHED || return 1
-#	rule ${out} reverse action "$@" chain "${out}_${mychain}" proto "udp" sport "${client_ports}" dport tftp state ESTABLISHED     || return 1
-	
-	# We now need both server and client port ranges
-	local s_client_ports="${DEFAULT_CLIENT_PORTS}"
-	local c_client_ports="${DEFAULT_CLIENT_PORTS}"
-	
-	if [ "${type}" = "client" -a "${work_cmd}" = "interface" ]
-	then
-		c_client_ports="${LOCAL_CLIENT_PORTS}"
-	elif [ "${type}" = "server" -a "${work_cmd}" = "interface" ]
-	then
-		s_client_ports="${LOCAL_CLIENT_PORTS}"
-	fi
-	
-	# allow the TFTP server to establish a new connection to the client
-	set_work_function "Setting up rules for server-to-client TFTP connection (${type})"
-	rule ${out} reverse action "$@" chain "${out}_${mychain}" proto "udp" sport "${c_client_ports}" dport "${s_client_ports}" state RELATED,ESTABLISHED || return 1
-	rule ${in}          action "$@" chain "${in}_${mychain}"  proto "udp" sport "${c_client_ports}" dport "${s_client_ports}" state ESTABLISHED         || return 1
-	
-	require_kernel_module ip_conntrack_tftp
-	test ${FIREHOL_NAT} -eq 1 && require_kernel_module ip_nat_tftp
-	
-	return 0
-}
+#
+#rules_tftp() {
+#	local mychain="${1}"; shift
+#	local type="${1}"; shift
+#	
+#	local in=in
+#	local out=out
+#	if [ "${type}" = "client" ]
+#	then
+#		in=out
+#		out=in
+#	fi
+#	
+#	local client_ports="${DEFAULT_CLIENT_PORTS}"
+#	if [ "${type}" = "client" -a "${work_cmd}" = "interface" ]
+#	then
+#		client_ports="${LOCAL_CLIENT_PORTS}"
+#	fi
+#	
+#	# ---------------------------------------------------------------------
+#	# TFTP is a broken protokol. It works like this:
+#	#
+#	# 1. The client sends from a high port (a) to the server's tftp port an
+#	#    udp packet with "give me file 'bla'".
+#	#
+#	# 2. The server replies from a high port (b) to the highport the client
+#	#    used (a) with "this is part 0 if your file"
+#	#
+#	# 3. The client now has to send a reply (from his highport a) to the
+#	#    servers high port (b): "got part 0, send next part 1".
+#	#
+#	# 4. repeat 2. and 3. till file transmitted
+#	
+#	# allow the initial TFTP connection
+#	set_work_function "Setting up rules for initial TFTP connection (${type})"
+#	rule ${in}          action "$@" chain "${in}_${mychain}"  proto "udp" sport "${client_ports}" dport tftp state NEW,ESTABLISHED || return 1
+##	rule ${out} reverse action "$@" chain "${out}_${mychain}" proto "udp" sport "${client_ports}" dport tftp state ESTABLISHED     || return 1
+#	
+#	# We now need both server and client port ranges
+#	local s_client_ports="${DEFAULT_CLIENT_PORTS}"
+#	local c_client_ports="${DEFAULT_CLIENT_PORTS}"
+#	
+#	if [ "${type}" = "client" -a "${work_cmd}" = "interface" ]
+#	then
+#		c_client_ports="${LOCAL_CLIENT_PORTS}"
+#	elif [ "${type}" = "server" -a "${work_cmd}" = "interface" ]
+#	then
+#		s_client_ports="${LOCAL_CLIENT_PORTS}"
+#	fi
+#	
+#	# allow the TFTP server to establish a new connection to the client
+#	set_work_function "Setting up rules for server-to-client TFTP connection (${type})"
+#	rule ${out} reverse action "$@" chain "${out}_${mychain}" proto "udp" sport "${c_client_ports}" dport "${s_client_ports}" state RELATED,ESTABLISHED || return 1
+#	rule ${in}          action "$@" chain "${in}_${mychain}"  proto "udp" sport "${c_client_ports}" dport "${s_client_ports}" state ESTABLISHED         || return 1
+#	
+#	require_kernel_module nf_conntrack_tftp
+#	test ${FIREHOL_NAT} -eq 1 && require_kernel_module nf_nat_tftp
+#	
+#	return 0
+#}
 
 
 # --- PING ---------------------------------------------------------------------
@@ -1697,65 +1825,6 @@ rules_timestamp() {
 	
 	# allow outgoing established packets
 	rule ${out} reverse action "$@" chain "${out}_${mychain}" proto icmp custom "--icmp-type timestamp-reply" state ESTABLISHED || return 1
-	
-	return 0
-}
-
-
-# --- P2P ----------------------------------------------------------------------
-
-rules_p2p() {
-        local mychain="${1}"; shift
-	local type="${1}"; shift
-	
-	local in=in
-	local out=out
-	if [ "${type}" = "client" ]
-	then
-		in=out
-		out=in
-	fi
-	
-	local client_ports="${DEFAULT_CLIENT_PORTS}"
-	if [ "${type}" = "client" -a "${work_cmd}" = "interface" ]
-	then
-		client_ports="${LOCAL_CLIENT_PORTS}"
-	fi
-	
-	# ----------------------------------------------------------------------
-	
-	# Remove the action from the arguments.
-	shift
-	
-	do_in() {
-		# allow new and established incoming packets
-		rule ${in} action "$@" chain "${in}_${mychain}" state NEW,ESTABLISHED || return 1
-	}
-	
-	do_out() {
-		# allow outgoing established packets
-		rule ${out} reverse action "$@" chain "${out}_${mychain}" state NEW,ESTABLISHED || return 1
-	}
-	
-	# Kazaa
-	# Check: http://www.derkeiler.com/Mailing-Lists/Firewall-Wizards/2003-06/0152.html
-	# New clients will try to use port 80 - use a proxy to filter this too.
-	set_work_function "Setting up rules for Kazaa (${type})"
-	do_in  drop "$@" proto "tcp udp" sport 1214
-	do_in  drop "$@" proto "tcp udp" dport 1214
-	do_out drop "$@" proto "tcp udp" dport 1214
-	do_out drop "$@" proto "tcp udp" sport 1214
-	
-	# Gnutella
-	
-	# Mldonkey
-	
-	# Emule
-	
-	# audiogalaxy
-	
-	# hotline
-	
 	
 	return 0
 }
@@ -1908,6 +1977,13 @@ rules_custom() {
 	local my_server_ports="${1}"; shift
 	local my_client_ports="${1}"; shift
 	
+	local helpers=
+	if [ "$1" = "helpers" ]
+	then
+		local helpers="$2"
+		shift 2
+	fi
+	
 	local in=in
 	local out=out
 	if [ "${type}" = "client" ]
@@ -1947,12 +2023,23 @@ EOF
 					;;
 			esac
 			
+			set_work_function "Rules for ${server} ${type}, with server port(s) '${sp}' and client port(s) '${cp}'"
+			
 			# allow new and established incoming packets
 			rule ${in} action "$@" chain "${in}_${mychain}" proto "${proto}" sport "${cport}" dport "${sport}" state NEW,ESTABLISHED || return 1
 			
 			# allow outgoing established packets
 			rule ${out} reverse action "$@" chain "${out}_${mychain}" proto "${proto}" sport "${cport}" dport "${sport}" state ESTABLISHED || return 1
 		done
+	done
+	
+	local x=
+	for x in ${helpers}
+	do
+		set_work_function "Rules for ${server} ${type}, with helper '${x}'"
+		
+		rule ${in}          action "$@" chain "${in}_${mychain}"  custom "-m helper --helper ${x}" state ESTABLISHED,RELATED || return 1
+		rule ${out} reverse action "$@" chain "${out}_${mychain}" custom "-m helper --helper ${x}" state ESTABLISHED,RELATED || return 1
 	done
 	
 	return 0
@@ -2352,17 +2439,20 @@ blacklist() {
 		# Blacklist INPUT unidirectional
 		iptables -t filter -N BL_IN_UNI	# INPUT
 		iptables -A BL_IN_UNI -m state --state NEW -j DROP
+		iptables -A BL_IN_UNI -j DROP
 		
 		# No need for OUTPUT/FORWARD unidirectional
 		
 		# Blacklist INPUT bidirectional
 		iptables -t filter -N BL_IN_BI	# INPUT
+		iptables -A BL_IN_BI -m state --state NEW -j DROP
 		iptables -A BL_IN_BI -j DROP
 		
 		# Blacklist OUTPUT/FORWARD bidirectional
 		iptables -t filter -N BL_OUT_BI	# OUTPUT and FORWARD
-		iptables -A BL_OUT_BI -p tcp -j REJECT --reject-with tcp-reset
-		iptables -A BL_OUT_BI -j REJECT --reject-with icmp-host-unreachable
+		iptables -A BL_OUT_BI -m state --state NEW -p tcp -j REJECT #--reject-with tcp-reset
+		iptables -A BL_OUT_BI -m state --state NEW -j REJECT --reject-with icmp-host-unreachable
+		iptables -A BL_OUT_BI -j REJECT
 		
 		blacklist_chain=1
 	fi
@@ -2390,6 +2480,60 @@ blacklist() {
 			fi
 		done
 	done
+	
+	return 0
+}
+
+classify_count=0
+classify() {
+	work_realcmd_helper $FUNCNAME "$@"
+	
+	set_work_function -ne "Initializing $FUNCNAME"
+	
+	require_work clear || ( error "$FUNCNAME cannot be used in '${work_cmd}'. Put it before any '${work_cmd}' definition."; return 1 )
+	
+	local class="${1}"; shift
+	classify_count=$[classify_count + 1]
+	
+	set_work_function "Setting up rules for CLASSIFY"
+	
+	create_chain mangle "classify.${classify_count}" POSTROUTING "$@" || return 1
+	iptables -t mangle -A "classify.${classify_count}" -j CLASSIFY --set-class ${class}
+	
+	return 0
+}
+
+connmark_count=0
+connmark() {
+	work_realcmd_helper $FUNCNAME "$@"
+	
+	set_work_function -ne "Initializing $FUNCNAME"
+	
+	require_work clear || ( error "$FUNCNAME cannot be used in '${work_cmd}'. Put it before any '${work_cmd}' definition."; return 1 )
+	
+	local num="${1}"; shift
+	local where="${1}"; shift
+	test -z "${where}" && where=OUTPUT
+	
+	connmark_count=$[connmark_count + 1]
+	
+	set_work_function "Setting up rules for CONNMARK"
+	
+	create_chain mangle "connmark.${connmark_count}" "${where}" "$@" || return 1
+	
+	case "${num}" in
+		save)
+			iptables -t mangle -A "connmark.${connmark_count}" -j CONNMARK --save-mark
+			;;
+		
+		restore)
+			iptables -t mangle -A "connmark.${connmark_count}" -j CONNMARK --restore-mark
+			;;
+			
+		*)
+			iptables -t mangle -A "connmark.${connmark_count}" -j CONNMARK --set-mark ${num}
+			;;
+	esac
 	
 	return 0
 }
@@ -2438,6 +2582,35 @@ tos() {
 	return 0
 }
 
+# from http://blog.edseek.com/~jasonb/articles/traffic_shaping/scenarios.html
+tosfix() {
+	work_realcmd=($FUNCNAME "$@")
+	
+	set_work_function -ne "Initializing $FUNCNAME"
+	
+	require_work clear || ( error "$FUNCNAME cannot be used in '${work_cmd}'. Put it before any '${work_cmd}' definition."; return 1 )
+	
+	set_work_function "Fixing TOS for TCP ACK packets"
+	
+	iptables -t mangle -N ackfix
+	iptables -t mangle -A ackfix -m tos ! --tos Normal-Service -j RETURN
+	iptables -t mangle -A ackfix -p tcp -m length --length 0:128 -j TOS --set-tos Minimize-Delay
+	iptables -t mangle -A ackfix -p tcp -m length --length 128: -j TOS --set-tos Maximize-Throughput
+	iptables -t mangle -A ackfix -j RETURN
+	iptables -t mangle -I POSTROUTING -p tcp -m tcp --tcp-flags SYN,RST,ACK ACK -j ackfix
+	
+	set_work_function "Fixing TOS for Minimize-Delay packets"
+	
+	iptables -t mangle -N tosfix
+	iptables -t mangle -A tosfix -p tcp -m length --length 0:512 -j RETURN
+	iptables -t mangle -A tosfix -m limit --limit 2/s --limit-burst 10 -j RETURN
+	iptables -t mangle -A tosfix -j TOS --set-tos Maximize-Throughput
+	iptables -t mangle -A tosfix -j RETURN
+	iptables -t mangle -I POSTROUTING -p tcp -m tos --tos Minimize-Delay -j tosfix
+	
+	return 0
+}
+
 dscp_count=0
 dscp() {
 	work_realcmd=($FUNCNAME "$@")
@@ -2479,23 +2652,55 @@ tcpmss() {
 	
 	set_work_function -ne "Initializing $FUNCNAME"
 	
+	local what_to_do=error
+	if [ "${work_cmd}" = "router" ]
+	then
+		if [ -z "${work_outface}" ]
+		then
+			local what_to_do=public
+		else
+			local what_to_do=interface
+		fi
+	elif [ -z "${work_cmd}" ]
+	then
+		local what_to_do=public
+	else
+		local what_to_do=error
+	fi
+	
 	# work only if this helper is called before any primary command
 	# or within routers.
-	if [ -z "${work_cmd}" -o "${work_cmd}" = "router" ]
+	if [ "${what_to_do}" = "public" ]
 	then
-		local chains="FORWARD"
+		set_work_function "Initializing tcpmss for all interfaces"
 		
-		test ! -z "${work_cmd}" && chains="in_${work_name} out_${work_name}"
+		case $1 in
+			auto)
+				iptables -t mangle -A POSTROUTING -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu
+				;;
+			
+			[0-9]*)
+				iptables -t mangle -A POSTROUTING -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --set-mss $1
+				;;
 		
-		for tcmpmss_chain in ${chains}
+			*)
+				error "$FUNCNAME requires either the word 'auto' or a numeric argument."
+				return 1
+				;;
+		esac
+	elif [ "${what_to_do}" = "interface" ]
+	then
+		local f=
+		for f in ${work_outface}
 		do
+			set_work_function "Initializing tcpmss for interface '${f}'"
 			case $1 in
 				auto)
-					iptables -A "${tcmpmss_chain}" -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu
+					iptables -t mangle -A POSTROUTING -o ${f} -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu
 					;;
 					
 				[0-9]*)
-					iptables -A "${tcmpmss_chain}" -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --set-mss $1
+					iptables -t mangle -A POSTROUTING -o ${f} -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --set-mss $1
 					;;
 				
 				*)
@@ -2629,8 +2834,8 @@ postprocess() {
 	test "A${1}" = "A-ne"   && shift && local check="none"
 	test "A${1}" = "A-warn" && shift && local check="warn"
 	
-	test ${FIREHOL_DEBUG}   -eq 1 && local check="none"
-	test ${FIREHOL_EXPLAIN} -eq 1 && local check="none"
+	test "${FIREHOL_MODE}" = "DEBUG"   && local check="none"
+	test "${FIREHOL_MODE}" = "EXPLAIN" && local check="none"
 	
 	if [ ! ${check} = "none" ]
 	then
@@ -2640,7 +2845,7 @@ postprocess() {
 	printf "%q " "$@" >>${FIREHOL_OUTPUT}
 	printf "\n" >>${FIREHOL_OUTPUT}
 	
-	if [ ${FIREHOL_EXPLAIN} -eq 1 ]
+	if [ "${FIREHOL_MODE}" = "EXPLAIN" ]
 	then
 		${CAT_CMD} ${FIREHOL_OUTPUT}
 		${RM_CMD} -f ${FIREHOL_OUTPUT}
@@ -2960,15 +3165,28 @@ fi
 # 2 = no info about this module in the kernel
 check_kernel_config() {
 	# In kernels 2.6.20+ _IP_ was removed from kernel iptables config names.
-	# Try both versions.
-	local t=`echo ${1} | sed "s/_IP_//g"`
+	# A few kernels have _CONNTRACT_ replaced with _CT_ for certain modules.
+	# Try all versions.
+	
+	# the original way
 	eval local kcfg1="\$${1}"
+	
+	# without _IP_
+	local t=`echo ${1} | sed "s/_IP_//g"`
 	eval local kcfg2="\$${t}"
+	
+	# _CONNTRACK_ as _CT_
+	local t=`echo ${1} | sed "s/_CONNTRACK_/_CT_/g"`
+	eval local kcfg3="\$${t}"
 	
 	# prefer the kernel 2.6.20+ way
 	if [ ! -z "${kcfg2}" ]
 	then
 		kcfg="${kcfg2}"
+	
+	elif [ ! -z "${kcfg3}" ]
+	then
+		kcfg="${kcfg3}"
 	else
 		kcfg="${kcfg1}"
 	fi
@@ -3055,6 +3273,7 @@ require_kernel_module() {
 		test "${m}" = "${new}" && return 0
 	done
 	
+	set_work_function "Adding kernel module '${new}' in the list of kernel modules to load"
 	FIREHOL_KERNEL_MODULES="${FIREHOL_KERNEL_MODULES} ${new}"
 	
 	return 0
@@ -3078,7 +3297,7 @@ set_work_function() {
 	
 	work_function="$*"
 	
-	if [ ${FIREHOL_EXPLAIN} -eq 1 ]
+	if [ "${FIREHOL_MODE}" = "EXPLAIN" ]
 	then
 		test ${show_explain} -eq 1 && printf "\n# %s\n" "$*"
 	elif [ ${FIREHOL_CONF_SHOW} -eq 1 ]
@@ -3196,8 +3415,8 @@ close_interface() {
 				rule reverse chain "out_${work_name}" proto tcp custom "--tcp-flags ALL ACK,FIN" action DROP || return 1
 			fi
 			
-			local -a inlog=(loglimit "'IN-${work_name}'")
-			local -a outlog=(loglimit "'OUT-${work_name}'")
+			local -a inlog=(loglimit "IN-${work_name}")
+			local -a outlog=(loglimit "OUT-${work_name}")
 			;;
 	esac
 	
@@ -3242,8 +3461,8 @@ close_router() {
 				rule reverse chain "out_${work_name}" proto tcp custom "--tcp-flags ALL ACK,FIN" action DROP || return 1
 			fi
 			
-			local -a inlog=(loglimit "'PASS-${work_name}'")
-			local -a outlog=(loglimit "'PASS-${work_name}'")
+			local -a inlog=(loglimit "PASS-${work_name}")
+			local -a outlog=(loglimit "PASS-${work_name}")
 			;;
 	esac
 	
@@ -3451,9 +3670,12 @@ rule_action_param() {
 								local -a logopts_arg=()
 								if [ "${FIREHOL_LOG_MODE}" = "ULOG" ]
 								then
-									local -a logopts_arg=("--ulog-prefix='${FIREHOL_LOG_PREFIX}LIMIT_OVERFLOW:'")
+									local -a logopts_arg=("--ulog-prefix=${FIREHOL_LOG_PREFIX}LIMIT_OVERFLOW:")
+								elif [ "${FIREHOL_LOG_MODE}" = "NFLOG" ]
+								then
+									local -a logopts_arg=("--nflog-prefix=${FIREHOL_LOG_PREFIX}LIMIT_OVERFLOW:")
 								else
-									local -a logopts_arg=("--log-level" "${FIREHOL_LOG_LEVEL}" "--log-prefix='${FIREHOL_LOG_PREFIX}LIMIT_OVERFLOW:'")
+									local -a logopts_arg=("--log-level" "${FIREHOL_LOG_LEVEL}" "--log-prefix=${FIREHOL_LOG_PREFIX}LIMIT_OVERFLOW:")
 								fi
 								iptables ${table} -A "${accept_limit_chain}" -m limit --limit "${FIREHOL_LOG_FREQUENCY}" --limit-burst "${FIREHOL_LOG_BURST}" -j ${FIREHOL_LOG_MODE} ${FIREHOL_LOG_OPTIONS} "${logopts_arg[@]}"
 								
@@ -5084,9 +5306,12 @@ rule() {
 	local -a logopts_arg=()
 	if [ "${FIREHOL_LOG_MODE}" = "ULOG" ]
 	then
-		local -a logopts_arg=("--ulog-prefix='${FIREHOL_LOG_PREFIX}${logtxt}:'")
+		local -a logopts_arg=("--ulog-prefix=${FIREHOL_LOG_PREFIX}${logtxt}:")
+	elif [ "${FIREHOL_LOG_MODE}" = "NFLOG" ]
+	then
+		local -a logopts_arg=("--nflog-prefix=${FIREHOL_LOG_PREFIX}${logtxt}:")
 	else
-		local -a logopts_arg=("--log-level" "${loglevel}" "--log-prefix='${FIREHOL_LOG_PREFIX}${logtxt}:'")
+		local -a logopts_arg=("--log-level" "${loglevel}" "--log-prefix=${FIREHOL_LOG_PREFIX}${logtxt}:")
 	fi
 	
 	# log / loglimit
@@ -5155,6 +5380,8 @@ softwarning() {
 # This command is directly called by other functions of FireHOL.
 
 error() {
+	test "${FIREHOL_MODE}" = "START" && syslog err "Error '${@}' when '${work_function}' at ${FIREHOL_CONFIG} line ${FIREHOL_LINEID}"
+	
 	work_error=$[work_error + 1]
 	echo >&2
 	echo >&2 "--------------------------------------------------------------------------------"
@@ -5183,8 +5410,8 @@ runtime_error() {
 	case "${1}" in
 		error)
 			local type="ERROR  "
-			work_final_status=$[work_final_status + 1]
-			local id="# ${work_final_status}."
+			work_runtime_error=$[work_runtime_error + 1]
+			local id="# ${work_runtime_error}."
 			;;
 			
 		warn)
@@ -5193,8 +5420,8 @@ runtime_error() {
 			;;
 		
 		*)
-			work_final_status=$[work_final_status + 1]
-			local id="# ${work_final_status}."
+			work_runtime_error=$[work_runtime_error + 1]
+			local id="# ${work_runtime_error}."
 			
 			echo >&2
 			echo >&2
@@ -5207,6 +5434,8 @@ runtime_error() {
 	
 	local ret="${1}"; shift
 	local line="${1}"; shift
+	
+	syslog err "Runtime ${type} '${id}'. Source ${FIREHOL_CONFIG} line ${line}"
 	
 	echo >&2
 	echo >&2
@@ -5375,7 +5604,22 @@ simple_service() {
 	local client_varname="client_${server}_ports"
 	eval local client_ports="\$${client_varname}"
 	
-	test -z "${server_ports}" -o -z "${client_ports}" && return 127
+	if [ ! -z "${server_ports}" -a -z "${client_ports}" ]
+	then
+		error "Simple service '${service}' has server ports, but no client ports defined."
+		return 1
+	elif [ -z "${server_ports}" -a ! -z "${client_ports}" ]
+	then
+		error "Simple service '${service}' has client ports, but no server ports defined."
+		return 1
+	elif [ -z "${server_ports}" -a -z "${client_ports}" ]
+	then
+		# this will make the caller attempt to find a complex service
+		return 127
+	fi
+	
+	local varname="helper_${server}"
+	eval local helpers="\$${varname}"
 	
 	local x=
 	local varname="require_${server}_modules"
@@ -5395,14 +5639,38 @@ simple_service() {
 		done
 	fi
 	
-	set_work_function "Running simple rules for  ${type} '${service}'"
+	# load the helper modules
+	for x in ${helpers}
+	do
+		case "${x}" in
+			snmp_basic)	# this does not exist in conntrack
+					;;
+					
+			*)		require_kernel_module nf_conntrack_$x
+					;;
+		esac
+		
+		if [ ${FIREHOL_NAT} -eq 1 ]
+		then
+			case "${x}" in
+				netbios_ns|netlink|sane)
+					# these do not exist in nat
+					;;
+					
+				*)	require_kernel_module nf_nat_$x
+					;;
+			esac
+		fi
+	done
 	
-	rules_custom "${mychain}" "${type}" "${server}" "${server_ports}" "${client_ports}" "$@"
+	set_work_function "Running simple rules for  ${type} '${service}'"
+	rules_custom "${mychain}" "${type}" "${server}" "${server_ports}" "${client_ports}" helpers "${helpers}" "$@"
+	
 	return $?
 }
 
 show_work_realcmd() {
-	test ${FIREHOL_EXPLAIN} -eq 1 && return 0
+	test "${FIREHOL_MODE}" = "EXPLAIN" && return 0
 	
 	(
 		printf "\n\n"
@@ -5463,7 +5731,7 @@ failure() {
 test -f /etc/init.d/functions && . /etc/init.d/functions
 
 if [ -z "${IPTABLES_CMD}" -o ! -x "${IPTABLES_CMD}" ]; then
-	echo >&2 "Cannot find an executables iptables command."
+	echo >&2 "Cannot find an executable iptables command."
 	exit 0
 fi
 
@@ -5503,25 +5771,28 @@ shift
 case "${arg}" in
 	explain)
 		test ! -z "${1}" && softwarning "Arguments after parameter '${arg}' are ignored."
-		FIREHOL_EXPLAIN=1
+		FIREHOL_MODE="EXPLAIN"
 		;;
 	
 	helpme|wizard)
 		test ! -z "${1}" && softwarning "Arguments after parameter '${arg}' are ignored."
-		FIREHOL_WIZARD=1
+		FIREHOL_MODE="WIZARD"
 		;;
 	
 	try)
 		test ! -z "${1}" && softwarning "Arguments after parameter '${arg}' are ignored."
+		FIREHOL_MODE="START"
 		FIREHOL_TRY=1
 		;;
 	
 	start)
 		test ! -z "${1}" && softwarning "Arguments after parameter '${arg}' are ignored."
+		FIREHOL_MODE="START"
 		FIREHOL_TRY=0
 		;;
 	
 	stop)
+		FIREHOL_MODE="STOP"
 		test ! -z "${1}" && softwarning "Arguments after parameter '${arg}' are ignored."
 		
 		test -f "${FIREHOL_LOCK_DIR}/firehol" && ${RM_CMD} -f "${FIREHOL_LOCK_DIR}/firehol"
@@ -5551,16 +5822,13 @@ case "${arg}" in
 	
 	restart|force-reload)
 		test ! -z "${1}" && softwarning "Arguments after parameter '${arg}' are ignored."
-		FIREHOL_TRY=0
+		FIREHOL_MODE="START"
 		;;
 	
 	condrestart)
 		test ! -z "${1}" && softwarning "Arguments after parameter '${arg}' are ignored."
-		FIREHOL_TRY=0
-		if [ -f "${FIREHOL_LOCK_DIR}/firehol" ]
-		then
-			exit 0
-		fi
+		test -f "${FIREHOL_LOCK_DIR}/firehol" && exit 0
+		FIREHOL_MODE="START"
 		;;
 	
 	status)
@@ -5587,6 +5855,7 @@ case "${arg}" in
 		;;
 	
 	panic)
+		FIREHOL_MODE="PANIC"
 		ssh_src=
 		ssh_sport="0:65535"
 		ssh_dport="0:65535"
@@ -5601,6 +5870,7 @@ case "${arg}" in
 			ssh_src="${1}"
 		fi
 		
+		syslog info "Starting PANIC mode (SSH SOURCE_IP=${ssh_src} SOURCE_PORTS=${ssh_sport} DESTINATION_PORTS=${ssh_dport})"
 		echo -n $"FireHOL: Blocking all communications:"
 		load_kernel_module ip_tables
 		tables=`${CAT_CMD} /proc/net/ip_tables_names`
@@ -5632,18 +5902,19 @@ case "${arg}" in
 	
 	save)
 		test ! -z "${1}" && softwarning "Arguments after parameter '${arg}' are ignored."
-		FIREHOL_TRY=0
+		FIREHOL_MODE="START"
 		FIREHOL_SAVE=1
 		;;
 		
 	debug)
 		test ! -z "${1}" && softwarning "Arguments after parameter '${arg}' are ignored."
-		FIREHOL_TRY=0
-		FIREHOL_DEBUG=1
+		FIREHOL_MODE="DEBUG"
 		;;
 	
 	*)	if [ ! -z "${arg}" -a -f "${arg}" ]
 		then
+			FIREHOL_MODE="START"
+			FIREHOL_TRY=1
 			FIREHOL_CONFIG="${arg}"
 			arg="${1}"
 			test "${arg}" = "--" && arg="" && shift
@@ -5652,17 +5923,15 @@ case "${arg}" in
 			case "${arg}" in
 				start)
 					FIREHOL_TRY=0
-					FIREHOL_DEBUG=0
 					;;
 					
 				try)
 					FIREHOL_TRY=1
-					FIREHOL_DEBUG=0
 					;;
 					
 				debug)
+					FIREHOL_MODE="DEBUG"
 					FIREHOL_TRY=0
-					FIREHOL_DEBUG=1
 					;;
 				
 				*)
@@ -5671,9 +5940,8 @@ case "${arg}" in
 					;;
 			esac
 		else
-		
 		${CAT_CMD} <<EOF
-$Id: firehol.sh,v 1.273 2008/07/31 00:46:41 ktsaou Exp $
+$Id: firehol.sh,v 1.296 2013/01/06 23:49:08 ktsaou Exp $
 (C) Copyright 2002-2007, Costa Tsaousis <costa@tsaousis.gr>
 FireHOL is distributed under GPL.
 
@@ -5828,12 +6096,15 @@ esac
 # Remove the next arg if it is --
 test "${1}" = "--" && shift
 
-if [ ${FIREHOL_EXPLAIN} -eq 0 -a ${FIREHOL_WIZARD} -eq 0 -a ! -f "${FIREHOL_CONFIG}" ]
+if [ "${FIREHOL_MODE}" = "START" -o "${FIREHOL_MODE}" = "DEBUG" ]
 then
-	echo -n $"FireHOL config ${FIREHOL_CONFIG} not found:"
-	failure $"FireHOL config ${FIREHOL_CONFIG} not found:"
-	echo
-	exit 1
+	if [ ! -f "${FIREHOL_CONFIG}" ]
+	then
+		echo -n $"FireHOL config ${FIREHOL_CONFIG} not found:"
+		failure $"FireHOL config ${FIREHOL_CONFIG} not found:"
+		echo
+		exit 1
+	fi
 fi
 
 
@@ -5847,7 +6118,7 @@ fi
 # XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 # ------------------------------------------------------------------------------
 
-if [ ${FIREHOL_EXPLAIN} -eq 1 ]
+if [ "${FIREHOL_MODE}" = "EXPLAIN" ]
 then
 	FIREHOL_CONFIG="Interactive User Input"
 	FIREHOL_LINEID="1"
@@ -5859,7 +6130,7 @@ then
 	
 	${CAT_CMD} <<EOF
 
-$Id: firehol.sh,v 1.273 2008/07/31 00:46:41 ktsaou Exp $
+$Id: firehol.sh,v 1.296 2013/01/06 23:49:08 ktsaou Exp $
 (C) Copyright 2003, Costa Tsaousis <costa@tsaousis.gr>
 FireHOL is distributed under GPL.
 Home Page: http://firehol.sourceforge.net
@@ -5976,7 +6247,7 @@ fi
 # XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 # ------------------------------------------------------------------------------
 
-if [ ${FIREHOL_WIZARD} -eq 1 ]
+if [ "${FIREHOL_MODE}" = "WIZARD" ]
 then
 	# require commands for wizard mode
 	require_cmd ip
@@ -6164,7 +6435,7 @@ then
 	
 	"${CAT_CMD}" >&2 <<EOF
 
-$Id: firehol.sh,v 1.273 2008/07/31 00:46:41 ktsaou Exp $
+$Id: firehol.sh,v 1.296 2013/01/06 23:49:08 ktsaou Exp $
 (C) Copyright 2003, Costa Tsaousis <costa@tsaousis.gr>
 FireHOL is distributed under GPL.
 Home Page: http://firehol.sourceforge.net
@@ -6242,7 +6513,7 @@ EOF
 	
 	${CAT_CMD} <<EOF
 #!${FIREHOL_FILE}
-# $Id: firehol.sh,v 1.273 2008/07/31 00:46:41 ktsaou Exp $
+# $Id: firehol.sh,v 1.296 2013/01/06 23:49:08 ktsaou Exp $
 # 
 # This config will have the same effect as NO PROTECTION!
 # Everything that found to be running, is allowed.
@@ -6298,10 +6569,10 @@ EOF
 			echo "# on the ${iface} interface with IP ${ifip} (net: ${ifnets})."
 		fi
 		
-		echo "# TODO: Change \"interface${i}\" to something with meaning to you."
+		echo "# TODO: Change \"if${i}\" to something with meaning to you."
 		echo "# TODO: Check the optional rule parameters (src/dst)."
-		echo "# TODO: Remove 'dst ${ifip}' if this is dynamically assigned."
-		echo "interface ${iface} interface${i} src ${ifnets} dst ${ifip}"
+		echo "#       Remove 'dst ${ifip}' if this is dynamically assigned."
+		echo "interface ${iface} if${i} src ${ifnets} dst ${ifip}"
 		echo
 		echo "	# The default policy is DROP. You can be more polite with REJECT."
 		echo "	# Prefer to be polite on your own clients to prevent timeouts."
@@ -6350,9 +6621,11 @@ EOF
 		echo
 		echo "	# Custom service definitions for the above unknown services."
 		local ts=
+		local tscount=0
 		for ts in `${CAT_CMD} unknown.ports`
 		do
-			echo "	server custom `echo "if$i/$ts" | tr "/" "_"` $ts any accept"
+			local tscount=$[tscount + 1]
+			echo "	server custom if${i}_${tscount} ${ts} any accept"
 		done
 		
 		echo
@@ -6639,6 +6912,10 @@ fi
 # XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 # ------------------------------------------------------------------------------
 
+# make sure we are alone
+firehol_concurrent_run_lock
+
+
 # --- Initialization -----------------------------------------------------------
 
 fixed_iptables_save() {
@@ -6688,7 +6965,7 @@ ${CAT_CMD} >"${FIREHOL_OUTPUT}" <<EOF
 #!/bin/sh
 
 load_kernel_module ip_tables
-load_kernel_module ip_conntrack
+load_kernel_module nf_conntrack
 
 # Find all tables supported
 tables=\`${CAT_CMD} /proc/net/ip_tables_names\`
@@ -6759,7 +7036,9 @@ ret=0
 ${CAT_CMD} >"${FIREHOL_TMP}.awk" <<"EOF"
 /^[[:space:]]*action[[:space:]]/ { printf "FIREHOL_LINEID=${LINENO} " }
 /^[[:space:]]*blacklist[[:space:]]/ { printf "FIREHOL_LINEID=${LINENO} " }
+/^[[:space:]]*classify[[:space:]]/ { printf "FIREHOL_LINEID=${LINENO} " }
 /^[[:space:]]*client[[:space:]]/ { printf "FIREHOL_LINEID=${LINENO} " }
+/^[[:space:]]*connmark[[:space:]]/ { printf "FIREHOL_LINEID=${LINENO} " }
 /^[[:space:]]*dnat[[:space:]]/ { printf "FIREHOL_LINEID=${LINENO} " }
 /^[[:space:]]*dscp[[:space:]]/ { printf "FIREHOL_LINEID=${LINENO} " }
 /^[[:space:]]*ecn_shame[[:space:]]/ { printf "FIREHOL_LINEID=${LINENO} " }
@@ -6787,7 +7066,9 @@ ${CAT_CMD} >"${FIREHOL_TMP}.awk" <<"EOF"
 { print }
 EOF
 
-${CAT_CMD} ${FIREHOL_CONFIG} | ${GAWK_CMD} -f "${FIREHOL_TMP}.awk" >${FIREHOL_TMP}
+# at the same time, replace all ${IPTABLES_CMD} references with just
+# the word 'iptables' to protect the currently running firewall
+${CAT_CMD} ${FIREHOL_CONFIG} | ${SED_CMD} "s|${IPTABLES_CMD}|iptables|g" | ${GAWK_CMD} -f "${FIREHOL_TMP}.awk" >${FIREHOL_TMP}
 ${RM_CMD} -f "${FIREHOL_TMP}.awk"
 
 # ------------------------------------------------------------------------------
@@ -6800,10 +7081,12 @@ FIREHOL_LINEID="FIN"
 enable trap			# Enable the trap buildin shell command.
 enable exit			# Enable the exit buildin shell command.
 
+close_cmd	|| ret=$[ret + 1]
+close_master	|| ret=$[ret + 1]
 
-close_cmd					|| ret=$[ret + 1]
-close_master					|| ret=$[ret + 1]
 
+# ------------------------------------------------------------------------------
+# append commands to close the firewall according to policies
 ${CAT_CMD} >>"${FIREHOL_OUTPUT}" <<EOF
 
 # Make it drop everything on table 'filter'.
@@ -6829,6 +7112,7 @@ echo
 
 
 # XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+# append commands to load the kernel modules
 
 for m in ${FIREHOL_KERNEL_MODULES}
 do
@@ -6836,6 +7120,7 @@ do
 done
 
 # XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+# append command to activate routing
 
 if [ $FIREHOL_ROUTING -eq 1 ]
 then
@@ -6843,8 +7128,9 @@ then
 fi
 
 # XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+# if we just debugging things, do not proceed further
 
-if [ ${FIREHOL_DEBUG} -eq 1 ]
+if [ "${FIREHOL_MODE}" = "DEBUG" ]
 then
 	${CAT_CMD} ${FIREHOL_OUTPUT}
 	
@@ -6854,39 +7140,46 @@ fi
 
 # XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 
+syslog info "Activating new firewall from ${FIREHOL_CONFIG} (translated to ${FIREHOL_COMMAND_COUNTER} iptables rules)."
 echo -n $"FireHOL: Activating new firewall (${FIREHOL_COMMAND_COUNTER} rules):"
 
 source ${FIREHOL_OUTPUT} "$@"
 
-if [ ${work_final_status} -gt 0 ]
+if [ ${work_runtime_error} -gt 0 ]
 then
 	failure $"FireHOL: Activating new firewall:"
 	echo
 	
-	# The trap will restore the firewall.
+	syslog err "Activation of new firewall failed."
+	# The trap will restore the firewall we saved above.
 	
 	exit 1
 fi
 success $"FireHOL: Activating new firewall (${FIREHOL_COMMAND_COUNTER} rules):"
 echo
+syslog info "Activation of new firewall succeeded."
 
 if [ ${FIREHOL_TRY} -eq 1 ]
 then
+	syslog info "Waiting user to commit the new firewall."
 	read -p "Keep the firewall? (type 'commit' to accept - 30 seconds timeout) : " -t 30 -e
 	ret=$?
 	echo
 	if [ ! $ret -eq 0 -o ! "${REPLY}" = "commit" ]
 	then
+		syslog err "User did not confirm the new firewall."
 		# The trap will restore the firewall.
 		
 		exit 1
 	else
 		echo "Successfull activation of FireHOL firewall."
+		syslog info "User committed new firewall."
 	fi
 fi
 
 # Remove the saved firewall, so that the trap will not restore it.
 ${RM_CMD} -f "${FIREHOL_SAVED}"
+FIREHOL_ACTIVATED_SUCCESSFULLY=1
 
 # Startup service locking.
 if [ -d "${FIREHOL_LOCK_DIR}" ]
@@ -6935,11 +7228,13 @@ then
 	
 	if [ ! $? -eq 0 ]
 	then
+		syslog err "Failed to save new firewall to '${FIREHOL_AUTOSAVE}'."
 		failure $"FireHOL: Saving firewall to ${FIREHOL_AUTOSAVE}:"
 		echo
 		exit 1
 	fi
 	
+	syslog info "New firewall saved to '${FIREHOL_AUTOSAVE}'."
 	success $"FireHOL: Saving firewall to ${FIREHOL_AUTOSAVE}:"
 	echo
 	

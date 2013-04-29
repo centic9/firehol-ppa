@@ -1,0 +1,15 @@
+Description: introduce /etc/default/firehol handling
+Origin: debian
+Author: Alexander Wirt <formorer@debian.org>
+Last-Update: 2007-08-30
+
+--- a/firehol.sh
++++ b/firehol.sh
+@@ -5785,6 +5785,7 @@
+ 	exit 0
+ fi
+ 
++test -e /etc/default/firehol && . /etc/default/firehol
+ 
+ # ------------------------------------------------------------------------------
+ # XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX

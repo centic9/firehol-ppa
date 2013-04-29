@@ -1,9 +1,59 @@
+firehol (1.296-0ubuntu0~ppa1) precise; urgency=low
+
+  * Backport to precise.
+
+ -- Dominik Stadler (Ubuntu key) <dominik.stadler@gmx.at>  Mon, 29 Apr 2013 20:10:06 +0200
+
+firehol (1.296-1) unstable; urgency=low
+
+  * New maintainer (Closes: #660524).
+  * New upstream version (Closes: #607785):
+    - Removed depedency to get-iana.sh and to RESERVED_IPS
+      (Closes: #583176, #565737, #574458, #598324, #455754, #536609, #558288),
+      thanks to Cristian Ionescu-Idbohrn <cristian.ionescu-idbohrn@axis.com>
+      (#536609), to Adrian Bridgett <adrian@smop.co.uk> (#583176);
+    - Updated documentations (Closes: #571727);
+    - Improved kernel modules management (Closes: #610249);
+    - Simplified quoting in log prefix (Closes: #443051) (LP: #253843);
+    - Passive FTP fix (Closes: #563655), thanks to Toni Mueller
+      <support@oeko.net>;
+    - Minor improvements and fixes.
+  * Update to source format 3.0 (quilt).
+  * Bump debhelper build-dep to >= 9.
+  * Bump Standards Version to 3.9.4.
+  * Rewrite debian/rules:
+    - use dh sequencer with minimal external Makefile.
+  * Revisit debian/control.
+  * Add empty but commented watch file.
+  * Correct manpages.
+  * Remove RESERVED_IPS as it is no more mandatory, nevertheless
+    /usr/share/doc/firehol/examples contains an updated minimal version.
+  * Move get-iana.sh to /usr/share/doc/firehol/examples
+    as RESERVED_IPS is no more mandatory.
+  * Render /etc/init.d/firehol independ from /usr tree.
+  * Add `status' option support to /etc/init.d/firehol (LP: #185978).
+  * Convert debian/copyright to DEP-5 format.
+  * Conform debian/patches/ patches to DEP-3 format.
+  * Generate now temporary directory with mktemp (Closes: #496424),
+    thanks to Phil Whineray for pointing to it.
+  * Now plainly use iproute (Red Hat Bugzilla: #784520),
+    thanks to Phil Whineray for hardening the original RedHat patch.
+  * Temporary files are now left behind in case of error (Closes: #703341),
+    thanks to Phil Whineray who backported the sanewall patch to FireHOL.
+  * `panic' option has been rationalized (Closes: #536675),
+    thanks to Andrew Schulman and Phil Whineray.
+  * Standard patch naming scheme (Closes: #705731), thanks to
+    Jari Aalto <jari.aalto@cante.net>.
+  * Whitespace cleanup, thanks to Jari Aalto <jari.aalto@cante.net>.
+
+ -- Jerome Benoit <calculus@rezozer.net>  Sat, 20 Apr 2013 07:06:57 +0000
+
 firehol (1.273-1) unstable; urgency=low
 
   * New upstream release
     - support /proc/config.gz (Closes: #465319)
     - works without less (Closes: #494941)
-  * Update RESERVED_IPS 
+  * Update RESERVED_IPS
   * fix comment in /etc/default/firehol (Closes: #521873)
   * Suggest ulogd (Closes: #555528)
 
@@ -11,7 +61,7 @@ firehol (1.273-1) unstable; urgency=low
 
 firehol (1.256-4) unstable; urgency=low
 
-  * Update list of reserved IPs (Closes: #455752, #479897)  
+  * Update list of reserved IPs (Closes: #455752, #479897)
   * Move get-iana to /usr/sbin
   * Make get-iana working again (Closes: #470879)
   * Fix get-iana name in firehol output (Closes: #475352)
@@ -30,8 +80,8 @@ firehol (1.256-3) unstable; urgency=low
 firehol (1.256-2) unstable; urgency=low
 
   * Add OpenVPN support (Closes: #440916)
-  * Allow lower and mixed case for START_FIREHOL. 
-    Old logic (start if != NO) got also restored. 
+  * Allow lower and mixed case for START_FIREHOL.
+    Old logic (start if != NO) got also restored.
     (Closes: #440919)
 
  -- Alexander Wirt <formorer@debian.org>  Wed, 05 Sep 2007 22:54:53 +0200
@@ -52,14 +102,14 @@ firehol (1.256-1) unstable; urgency=low
 
 firehol (1.231-7) unstable; urgency=low
 
-  * Remove bashism from init script (Closes: #390726) 
+  * Remove bashism from init script (Closes: #390726)
 
  -- Alexander Wirt <formorer@debian.org>  Tue,  3 Oct 2006 12:52:57 +0200
 
 firehol (1.231-6) unstable; urgency=low
 
   * Remove simple dhcp config (Closes: #390178)
-  * Switch initfile to LSB conformance 
+  * Switch initfile to LSB conformance
 
  -- Alexander Wirt <formorer@debian.org>  Fri, 29 Sep 2006 18:44:27 +0200
 
@@ -74,17 +124,17 @@ firehol (1.231-5) unstable; urgency=low
   * Updates description (Closes: #359221)
   * Changed client range to 1000:65535 (Closes: #357034)
   * Fixed some spelling error in the package description (Closes: #363413)
-  * Backported some fix the nfs service 
+  * Backported some fix the nfs service
   * Backported service ospf from cvs
   * Backported a fix for the spf client from cvs
   * Backported a fix for the sip service
-  * Backported recent feature 
+  * Backported recent feature
 
  -- Alexander Wirt <formorer@debian.org>  Fri, 21 Jul 2006 17:52:29 +0200
 
 firehol (1.231-4) unstable; urgency=low
 
-  * Cleaned up tempdir creation and removal in firehol-wizard 
+  * Cleaned up tempdir creation and removal in firehol-wizard
     (Closes: #324598). Thanks to Javier Fernández-Sanguino Peña for the patch
 
  -- Alexander Wirt <formorer@debian.org>  Tue, 23 Aug 2005 07:23:29 +0200
@@ -103,7 +153,7 @@ firehol (1.231-2) unstable; urgency=medium
 
 firehol (1.231-1) unstable; urgency=low
 
-  * New upstream release (Closes: #303560) 
+  * New upstream release (Closes: #303560)
 
  -- Alexander Wirt <formorer@debian.org>  Fri,  8 Apr 2005 20:40:43 +0200
 
@@ -119,7 +169,7 @@ firehol (1.214-2) unstable; urgency=high
   * Fixed wrong named variable in the lan-gateway.conf example
     (Closes: #289211)
   * Added the possibility to wait for an interface if set in
-    /etc/default/firehol. See README.Debian for more infos 
+    /etc/default/firehol. See README.Debian for more infos
     (Closes: #291667) Thanks again to Sam Couter for the patch.
 
  -- Alexander Wirt <formorer@debian.org>  Sat, 22 Jan 2005 15:11:18 +0100
@@ -147,7 +197,7 @@ firehol (1.191-1) unstable; urgency=low
   * New Upstream Release
     + Better Kernel Module managment (Closes: #244241, #242062)
   * Fixed description so that new users doesn't get scared (Closes: #243102)
-  * Fixed /etc/default/firehol handling (Closes: #245307) 
+  * Fixed /etc/default/firehol handling (Closes: #245307)
     Thanks Michael Ablassmeier for the patch.
   * Mentioned firehol-wizard in the new README.Debian
   * Moved firehol and firehol-wizard manpages into the correct section
@@ -210,7 +260,7 @@ firehol (1.129+cvs+20030601-1) unstable; urgency=low
 
   * Splitted firehol.sh in 2 scripts (firehol.sh, firehol-wizard.sh),
     created a lib and a init-script.
-  * Changed startup order to create an iptables firewall before 
+  * Changed startup order to create an iptables firewall before
     configuring the network devices (and stop it after deconfiguring
     them)
 
@@ -235,7 +285,7 @@ firehol (1.128-3) unstable; urgency=low
 firehol (1.128-2) unstable; urgency=low
 
   * Fixed use of /var/lock/subsys/*
- 
+
  -- Marc Brockschmidt <marc@dch-faq.de>  Thu, 01 May 2003 21:45:00 +0200
 
 firehol (1.128-1) unstable; urgency=low

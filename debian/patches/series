@@ -1,0 +1,12 @@
+01-wizard-support-vlan.patch
+02-add-wait-feature.patch
+03-debian-default.patch
+04-use-awk.patch
+05-fix-msnport.patch
+06-add-openvpn.patch
+09-use-mktemp.patch
+10-discard-nettools.patch
+11-temporary-folder-error-handling.patch
+12-panic-option-rationalization.patch
+zz-fix-upstream-manpages.patch
+zz-debianization.patch

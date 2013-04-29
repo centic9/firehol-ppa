@@ -1,0 +1,58 @@
+Description: use of ss and ip instead of netstat and ifconfig
+ Original Red Hat patch (Bugzilla: #784520) by Jiri Popelka
+ hardened by Phil Whineray to ensure ss gets same results
+ in wizard as netstat.
+Origin: red hat
+Author: Jiri Popelka <jpopelka@redhat.com>
+Author: Phil Whineray <phil@sanewall.org>
+Last-Update: 2013-03-18
+
+--- a/examples/home-adsl.conf
++++ b/examples/home-adsl.conf
+@@ -64,7 +64,7 @@
+ # the user did not gave it to us.
+ if [ -z "${adsl_interface_ip}" ]
+ then
+-	adsl_interface_ip=`ifconfig | grep -A 1 ${adsl_interface} | grep "inet addr:" | cut -d ':' -f 2 | cut -d ' ' -f 1`
++	adsl_interface_ip=`ip -4 -o addr show dev ${adsl_interface} | awk '{ print $4}' | cut -d '/' -f 1`
+ fi
+ 
+ # Build the optional rule parameters, if we have the adsl_interface_ip
+--- a/firehol.sh
++++ b/firehol.sh
+@@ -132,7 +132,7 @@
+ # zcat or gzcat or gzip (either or none is fine)
+ # less or more (either or none is fine)
+ # ip
+-# netstat
++# ss
+ # date
+ # hostname
+ 
+@@ -6284,7 +6284,7 @@
+ then
+ 	# require commands for wizard mode
+ 	require_cmd ip
+-	require_cmd netstat
++	require_cmd ss
+ 	require_cmd date
+ 	require_cmd hostname
+ 	
+@@ -6621,7 +6621,7 @@
+ 		(
+ 			local x=
+ 			local ports=
+-			for x in `${NETSTAT_CMD} -an | ${EGREP_CMD} "^tcp" | ${SED_CMD} "s|:::|0.0.0.0:|g" | ${GREP_CMD} "0.0.0.0:*" | ${EGREP_CMD} " (${ifip}|0.0.0.0):[0-9]+" | ${CUT_CMD} -d ':' -f 2 | ${CUT_CMD} -d ' ' -f 1 | ${SORT_CMD} -n | ${UNIQ_CMD}`
++			for x in `${SS_CMD} -tln | ${SED_CMD} "s|:::|\*:|g" | ${SED_CMD} "s|::ffff:||g" | ${EGREP_CMD} " (${ifip}|\*):[0-9]+" | ${CUT_CMD} -d ':' -f 2 | ${CUT_CMD} -d ' ' -f 1 | ${SORT_CMD} -n | ${UNIQ_CMD}`
+ 			do
+ 				if [ -f "tcp/${x}" ]
+ 				then
+@@ -6631,7 +6631,7 @@
+ 				fi
+ 			done
+ 			
+-			for x in `${NETSTAT_CMD} -an | ${EGREP_CMD} "^udp" | ${SED_CMD} "s|:::|0.0.0.0:|g" | ${GREP_CMD} "0.0.0.0:*" | ${EGREP_CMD} " (${ifip}|0.0.0.0):[0-9]+" | ${CUT_CMD} -d ':' -f 2 | ${CUT_CMD} -d ' ' -f 1 | ${SORT_CMD} -n | ${UNIQ_CMD}`
++			for x in `${SS_CMD} -uln | ${SED_CMD} "s|:::|\*:|g" | ${SED_CMD} "s|::ffff:||g" | ${EGREP_CMD} " (${ifip}|\*):[0-9]+" | ${CUT_CMD} -d ':' -f 2 | ${CUT_CMD} -d ' ' -f 1 | ${SORT_CMD} -n | ${UNIQ_CMD}`
+ 			do
+ 				if [ -f "udp/${x}" ]
+ 				then

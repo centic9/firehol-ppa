@@ -1,8 +1,0 @@
-01_wizard_support_vlan
-02_add_wait_feature
-03_debian_default
-04_use_mawk
-05_fix_msnport
-06_add_openvpn
-#07_fix_get_iana.dpatch
-#08_fix_get_iana_path.dpatch

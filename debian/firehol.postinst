@@ -1,0 +1,11 @@
+#!/bin/sh
+set -e
+if [ -f /etc/firehol.conf ]; then
+	mv -f /etc/firehol.conf /etc/firehol/firehol.conf
+	echo
+	echo
+	echo "FireHOL has now its configuration in /etc/firehol/firehol.conf"
+	echo "Your existing configuration has been moved to its new place."
+	echo
+fi
+#DEBHELPER#

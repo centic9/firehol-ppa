@@ -2,15 +2,15 @@ Adding additional services to firehol
 =====================================
 
 Since version 1.214 it is possible to define new
-services with extra config files dropped into 
+services with extra config files dropped into
 /etc/firehol/services. Every file with the ending
-.conf gets parsed. 
+.conf gets parsed.
 
 Any config file should start with a specical header:
 
 #FHVER: 1:213
 
-1 is the API version and 213 the minimum version of FireHOL 
+1 is the API version and 213 the minimum version of FireHOL
 the service is expected to work with.
 Inside the configfile you could use any service defintion
 as described at: http://firehol.sourceforge.net/adding.html?

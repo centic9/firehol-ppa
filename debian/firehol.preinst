@@ -1,0 +1,22 @@
+#!/bin/sh
+set -e
+if [ -f /etc/firehol/RESERVED_IPS ]; then
+  mv -f /etc/firehol/RESERVED_IPS /etc/firehol/RESERVED_IPS.dpkg-bak
+  echo
+  echo
+  echo "FireHOL does no more require the IANA Reserved IPS data file RESERVED_IPS."
+  echo "The existing RESERVED_IPS has been saved as RESERVED_IPS.dpkg-bak."
+  if [ -f /etc/firehol/RESERVED_IPS.old ]; then
+    mv -f /etc/firehol/RESERVED_IPS.old /etc/firehol/RESERVED_IPS.old.dpkg-bak
+    echo "The existing RESERVED_IPS.old has been saved as RESERVED_IPS.old.dpkg-bak."
+  fi
+  echo
+elif [ -f /etc/firehol/RESERVED_IPS.old ]; then
+  mv -f /etc/firehol/RESERVED_IPS.old /etc/firehol/RESERVED_IPS.old.dpkg-bak
+  echo
+  echo
+  echo "FireHOL does no more require the IANA Reserved IPS data file RESERVED_IPS."
+	echo "The existing RESERVED_IPS.old has been saved as RESERVED_IPS.old.dpkg-bak."
+  echo
+fi
+#DEBHELPER#

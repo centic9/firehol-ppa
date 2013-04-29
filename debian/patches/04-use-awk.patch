@@ -1,0 +1,16 @@
+Description:  generic awk dependancy
+Origin: debian
+Author: Alexander Wirt <formorer@debian.org>
+Last-Update: 2009-11-14
+
+--- a/firehol.sh
++++ b/firehol.sh
+@@ -145,7 +145,7 @@
+ which_cmd EXPR_CMD expr
+ which_cmd FIND_CMD find
+ which_cmd FOLD_CMD fold
+-which_cmd GAWK_CMD gawk
++which_cmd GAWK_CMD awk
+ which_cmd GREP_CMD grep
+ which_cmd HEAD_CMD head
+ which_cmd IPTABLES_CMD iptables
