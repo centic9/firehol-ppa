@@ -1,4 +1,10 @@
 #!/usr/bin/make -f
 
+default:
+	@uscan --no-conf --dehs --report || true
+
 %:
 	dh $@
+
+get-orig-source:
+	uscan --no-conf --download-current-version --verbose

@@ -8,5 +8,7 @@
 10-discard-nettools.patch
 11-temporary-folder-error-handling.patch
 12-panic-option-rationalization.patch
+13-mac-filtering.patch
+14-kernel-versioning.patch
 zz-fix-upstream-manpages.patch
 zz-debianization.patch

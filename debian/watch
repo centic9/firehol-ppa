@@ -1,3 +1,3 @@
-# FireHOL is no more plainly maintained, and there is no more official release:
-# this release (1.296) was downloaded from the still alive CVSWeb tree
-# ( http://firehol.sourceforge.net/ ).
+version=3
+opts=pgpsigurlmangle=s/$/.asc/ \
+http://firehol.org/download/releases/(\d+\.\d+)/firehol-([\d\.]+)\.tar\.gz

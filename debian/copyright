@@ -1,14 +1,18 @@
 Format: http://www.debian.org/doc/packaging-manuals/copyright-format/1.0
 Upstream-Name: firehol
-Upstream-Contact: Costa Tsaousis <costa@tsaousis.gr>, <ktsaou@users.sf.net>
-Source: http://firehol.sf.net
-X-Source: http://freecode.com/projects/firehol
-X-Upstream-Vcs: http://sourceforge.net/projects/firehol/develop
-X-Upstream-Bugs: http://sourceforge.net/tracker/?group_id=58425
+Upstream-Contact:
+ Costa Tsaousis <costa@firehol.org>, <costa@tsaousis.gr>
+ Phil Whineray <phil@firehol.org>
+Source: http://firehol.org
+X-Source:
+ http://freecode.com/projects/firehol
+ http://www.ohloh.net/p/firehol
+X-Upstream-Vcs: http://github.com/ktsaou/firehol
+X-Upstream-Bugs: http://github.com/ktsaou/firehol/issues
 
 Files: *
 Copyright:
-  2002-2013 Costa Tsaousis <costa@tsaousis.gr>
+  2003-2013 Costa Tsaousis <costa@tsaousis.gr>
 License: GPL-2+
 
 Files: debian/*
