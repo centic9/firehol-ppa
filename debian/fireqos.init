@@ -1,0 +1,140 @@
+#! /bin/sh
+### BEGIN INIT INFO
+# Provides:          fireqos
+# Required-Start:    $network $remote_fs $syslog
+# Required-Stop:     $network $remote_fs $syslog
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Description: Starts fireqos traffic shaper configuration
+# short-description: fireqos traffic shaper configuration
+### END INIT INFO
+
+PATH=/bin:/usr/bin:/sbin:/usr/sbin
+NAME=fireqos
+DESC="traffic shaper"
+SCRIPTNAME=/etc/init.d/$NAME
+
+test -x /usr/sbin/fireqos || exit 0
+
+[ -r /etc/default/fireqos ] && set -a && . /etc/default/fireqos
+
+# load the VERBOSE setting and other rcS variables
+. /lib/init/vars.sh
+
+# include lsb functions
+. /lib/lsb/init-functions
+
+case "$START_FIREQOS" in
+	NO|no)
+	START_FIREQOS=NO
+	;;
+	*)
+	START_FIREQOS=YES
+	;;
+esac
+
+do_start () {
+	# return
+	#  0 000 if traffic shaper has been handled
+	#  1 001 if traffic shaper could not be started
+	#  4 100 if FireQOS is disabled via /etc/default/fireqos
+	[ "$START_FIREQOS" = "NO"  ] && return 4
+	/usr/sbin/fireqos start "$@" > /dev/null 2>&1 || return 1
+}
+
+do_stop () {
+	# return
+	#  0 000 if traffic shaper has been cleaned up properly
+	#  1 001 otherwise
+	/usr/sbin/fireqos stop > /dev/null 2>&1 || return 1
+}
+
+do_clear () {
+	# return
+	#  0 000 if traffic shaper has been cleared
+	#  1 001 otherwise
+	/usr/sbin/fireqos clear_all_qos > /dev/null 2>&1 || return 1
+}
+
+do_progressing_restart () {
+	# return
+	#  0 000 if traffic shaper has been handled
+	#  1 001 if traffic shaper could not be stopped (or cleaned up properly)
+	#  2 010 if traffic shaper could be stopped but not started
+	#  4 100 if FireQOS is disabled via /etc/default/fireqos
+	[ "$START_FIREQOS" = "NO"  ] && return 4
+	log_progress_msg "stopping"
+	/usr/sbin/fireqos stop > /dev/null 2>&1 || return 1
+	log_progress_msg "starting"
+	/usr/sbin/fireqos start "$@" > /dev/null 2>&1 || return 2
+}
+
+COMMAND="$1"
+[ "$COMMAND" ] && shift
+
+case "$COMMAND" in
+	start)
+		[ "$VERBOSE" != no ] && log_daemon_msg "Starting $DESC" "$NAME"
+		do_start "$@"
+		case "$?" in
+			0) [ "$VERBOSE" != no ] && log_end_msg 0 ;;
+			1) [ "$VERBOSE" != no ] && log_end_msg 1 ;;
+			4) [ "$VERBOSE" != no ] && { log_progress_msg "disabled, see /etc/default/fireqos" ; log_end_msg 255 ; } ;;
+		esac
+	;;
+
+	stop)
+		[ "$VERBOSE" != no ] && log_daemon_msg "Stopping $DESC" "$NAME"
+		do_stop
+		case "$?" in
+			0) [ "$VERBOSE" != no ] && log_end_msg 0 ;;
+			1) [ "$VERBOSE" != no ] && log_end_msg 1 ;;
+		esac
+	;;
+
+	reload)
+		log_daemon_msg "Reloading $DESC" "$NAME"
+		do_start "$@"
+		case "$?" in
+			0) log_end_msg 0 ;;
+			1) log_end_msg 1 ; exit 1 ;;
+			4) log_progress_msg "disabled, see /etc/default/fireqos" ; log_end_msg 255 ; ;;
+		esac
+	;;
+
+	restart|force-reload)
+		log_daemon_msg "Restarting $DESC $NAME"
+		do_progressing_restart "$@"
+		case "$?" in
+			0) log_end_msg 0 ;;
+			1|2) log_end_msg 1 ; exit 1 ;;
+			4) log_progress_msg "$NAME disabled, see /etc/default/fireqos" ; log_end_msg 255 ; ;;
+		esac
+	;;
+
+	clear)
+		log_daemon_msg "Clearing $DESC" "$NAME"
+		do_clear
+		case "$?" in
+			0) log_end_msg 0 ;;
+			1) log_end_msg 1 ; exit 1 ;;
+		esac
+	;;
+
+	status)
+		if [ "$START_FIREQOS" = "NO"  ]; then
+			log_warning_msg "$DESC $NAME disabled via /etc/default/fireqos"
+			exit 0
+		else
+			log_success_msg "$DESC $NAME enabled via /etc/default/fireqos"
+			exit 4
+		fi
+	;;
+
+	*)
+	echo "Usage: $SCRIPTNAME {start|stop|reload|restart|force-reload|clear|status} [<args>]" >&2
+	exit 3
+	;;
+esac
+
+:

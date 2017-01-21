@@ -1,0 +1,26 @@
+Description: ambiguous shebang in FireQOS example: discard
+ Discard the ambiguous (and likely forgotten) shebang as detected by lintian
+ in the FireQOS example multiple-organizations.conf ; meant to silence lintian
+ and eventually to be submitted to the upstream maintainer.
+Origin: vendor, Debian
+Forwarded: https://github.com/firehol/firehol/pull/188
+Comment: example-unusual-interpreter example-interpreter-not-absolute
+Author: Jerome Benoit <calculus@rezozer.net>
+Last-Update: 2017-01-21
+
+--- a/examples/fireqos-multiple-organizations.conf
++++ b/examples/fireqos-multiple-organizations.conf
+@@ -1,9 +1,10 @@
+-#!fireqos
+ 
+-# 
++#
+ # Share bandwidth between different organizations
+ #
+-# This script will allow you to segment any interface to multiple organizations.
++# This FireQOS configuration file will allow you to segment any interface to
++# multiple organizations.
++#
+ # Both INPUT and OUTPUT bandwidth will be segmented.
+ # Spare bandwidth, i.e. bandwidth not used by an organization will be made
+ # available for the others to use.

@@ -1,3 +1,176 @@
+firehol (3.1.1+ds-1) unstable; urgency=medium
+
+  * New upstream minor version.
+  * Debianization:
+    - debian/copyright, refresh;
+    - debian/watch, update;
+    - debian/patches/:
+      - d/p/upstream-lintian-spelling-error-silence.patch, integrated;
+      - d/p/debianization-fireqos.patch, dicard (see second last subsection);
+      - d/p/upstream-silence-lintian-example-interpreter-not-absolute.patch,
+        introduce and submitted;
+      - d/p/upstream-update-doc-copyright-year.patch, submitted;
+    - make /etc/firehol the configuration folder for FireQOS
+      as in the upstream distribution;
+    - fix typos.
+
+ -- Jerome Benoit <calculus@rezozer.net>  Sat, 21 Jan 2017 10:19:12 +0000
+
+firehol (3.0.2+ds-1) unstable; urgency=medium
+
+  * New upstream version.
+  * Debianization:
+    - debian/control:
+      - Depends field, add lsb-base for firehol and fireqos;
+    - debian/patches/:
+      - d/p/upstream-(!lintian)*.patch, integrated by the upstream team (thanks
+        to the upstream team);
+      - d/p/upstream-lintian-spelling-error-silence.patch, introduce and submit.
+
+ -- Jerome Benoit <calculus@rezozer.net>  Tue, 22 Nov 2016 17:42:47 +0000
+
+firehol (3.0.1+ds-3) unstable; urgency=medium
+
+  * Debianization:
+    - debian/control:
+      - Replaces/Breaks fields, adjust;
+      - Enhances fields, introduce.
+
+ -- Jerome Benoit <calculus@rezozer.net>  Thu, 04 Aug 2016 12:51:12 +0000
+
+firehol (3.0.1+ds-2) unstable; urgency=medium
+
+  * Debianization:
+    - debian/control:
+      - Vcs-Git field, correct;
+      - Standards Version, bump to 3.9.8 (no change);
+    - manpages belonging to section 5 (files formats and conventions)
+      are now gathered in their associated -doc package, thanks to
+      Alexander Perlis <aperlis@math.lsu.edu> for reporting the issue
+      (Closes: #819742).
+
+ -- Jerome Benoit <calculus@rezozer.net>  Thu, 04 Aug 2016 00:01:17 +0000
+
+firehol (3.0.1+ds-1) unstable; urgency=medium
+
+  * New upstream major version (Closes: #813114).
+  * Debianization:
+    - debian/control:
+      - new binary packages: firehol-tools{,-doc} and firehol-common;
+      - Homepage, Vcs-* fields: refresh and secure;
+      - Standards Version, bump to 3.9.7 (no change);
+      - refresh;
+    - debian/copyright:
+      - repack by using the Files-Excluded machinery instead of the ad-hoc
+        script debian/repack;
+      - refresh;
+    - debian/repack, discard (see above);
+    - debian/watch:
+      - revisit (see above);
+      - harden;
+    - debian/rules, harden;
+    - debian/fire{hol,qos}-doc.doc-base, revisit;
+    - material for firehol-tools, firehol-tools-doc and firehol-common.
+  * Minor, cosmetic fixes submitted to the upstream maintainers.
+
+ -- Jerome Benoit <calculus@rezozer.net>  Mon, 22 Feb 2016 04:07:11 +0000
+
+firehol (2.0.3+ds-1) unstable; urgency=medium
+
+  * New upstream version.
+
+ -- Jerome Benoit <calculus@rezozer.net>  Sun, 26 Apr 2015 13:55:25 +0000
+
+firehol (2.0.2+ds-2) unstable; urgency=medium
+
+  * Debianization:
+    - debian/rules: add --restart-after-upgrade to dh_installinit, thanks to
+      Michael Gebetsroither <michael@mgeb.org> for the hint (Closes: #780356).
+
+ -- Jerome Benoit <calculus@rezozer.net>  Fri, 13 Mar 2015 20:33:30 +0000
+
+firehol (2.0.2+ds-1) unstable; urgency=medium
+
+  * New upstream version.
+
+ -- Jerome Benoit <calculus@rezozer.net>  Fri, 06 Mar 2015 10:46:29 +0000
+
+firehol (2.0.1+ds-1) unstable; urgency=medium
+
+  * New upstream version.
+  * Debianization:
+    - debian/watch: watch only for stable releases;
+    - debian/copyright: refresh.
+
+ -- Jerome Benoit <calculus@rezozer.net>  Tue, 17 Feb 2015 13:32:19 +0000
+
+firehol (2.0.0+ds-2) unstable; urgency=medium
+
+  * Debianization:
+    - debian/control:
+      - Breaks+Replaces machinery relations to smooth upgrade for
+        firehol+firehol-doc, add (Closes: #767565).
+
+ -- Jerome Benoit <calculus@rezozer.net>  Sat, 01 Nov 2014 22:44:06 +0000
+
+firehol (2.0.0+ds-1) unstable; urgency=medium
+
+  * New upstream (officially) stable version:
+    - mark the first (officially) stable release of FireHOL with IPv6 support
+      and including FireQOS to provide traffic management for humans;
+    - no changes from ~rc.3.
+  * Debianization:
+    - debian/control, revisit;
+    - debian/watch, correct.
+
+ -- Jerome Benoit <calculus@rezozer.net>  Fri, 24 Oct 2014 14:54:12 +0000
+
+firehol (2.0.0~rc.3+ds-1) unstable; urgency=medium
+
+  * New upstream version.
+
+ -- Jerome Benoit <calculus@rezozer.net>  Sun, 19 Oct 2014 23:38:27 +0000
+
+firehol (2.0.0~rc.2+ds-1) unstable; urgency=medium
+
+  * New upstream major version:
+    - previous non-Debian-centric minor fixes were integrated, all of them
+      but the faulty `concurrent run' one.
+  * Debianization:
+    - debian/control:
+      - Standards Version, bump to 3.9.6 (no change);
+    - debian/repack, refresh.
+
+ -- Jerome Benoit <calculus@rezozer.net>  Mon, 13 Oct 2014 00:49:21 +0000
+
+firehol (2.0.0~rc.1+ds-1) experimental; urgency=medium
+
+  * New upstream major version:
+     - IPv6 support (Closes: #292621);
+     - detailed documentation (Closes: #556575);
+     - traffic shaping support coined FireQOS as
+       counterpart of the firewall FireHOL;
+     - all non-Debian-centric patches were incorporated.
+  * Debianization:
+     - debian/control:
+       - update descriptions;
+       - new binary packages: firehol-doc, fireqos and fireqos-doc;
+     - debian/{copyright,NEWS,README.{Debian,Services}}, refresh;
+     - debian/firehol.init, revisit (Closes: #574459);
+     - material for firehol-doc, fireqos and fireqos-doc;
+     - firehol has been moved from /sbin to /usr/sbin for consistency
+       reasons, fireqos being in /usr/sbin for similar reasons;
+     - /etc/default/firehol is no more source_d by firehol;
+     - /etc/init.d/firehol now exports variables defined in
+       /etc/default/firehol;
+     - debian/firehol.README.Debian, add notes (with samples) to log
+       firehol messages to a separate log file with rsyslog;
+     - make /etc/fireqos the configuration folder for FireQOS
+       instead of /etc/firehol as in the upstream distribution.
+  * Minor, cosmetic fixes submitted to the upstream maintainers.
+
+ -- Jerome Benoit <calculus@rezozer.net>  Fri, 15 Aug 2014 13:53:52 +0000
+
 firehol (1.297-1) unstable; urgency=low
 
   * New upstream version:
@@ -48,7 +221,7 @@ firehol (1.296-1) unstable; urgency=low
 
   * New maintainer (Closes: #660524).
   * New upstream version (Closes: #607785):
-    - Removed depedency to get-iana.sh and to RESERVED_IPS
+    - Removed dependency to get-iana.sh and to RESERVED_IPS
       (Closes: #583176, #565737, #574458, #598324, #455754, #536609, #558288),
       thanks to Cristian Ionescu-Idbohrn <cristian.ionescu-idbohrn@axis.com>
       (#536609), to Adrian Bridgett <adrian@smop.co.uk> (#583176);
@@ -159,7 +332,7 @@ firehol (1.231-5) unstable; urgency=low
     (Thanks to Eduard Bloch for the idea) (Closes: #335328)
   * Updates list of reserved ips (Closes: #357250, Closes: #379127)
   * Updated manpage (Closes: #335602)
-  * Removed bc from depedencies (Closes: #349409)
+  * Removed bc from dependencies (Closes: #349409)
   * Updated manpage for the protection command (Closes: #371832)
   * Updates description (Closes: #359221)
   * Changed client range to 1000:65535 (Closes: #357034)
@@ -235,13 +408,13 @@ firehol (1.191-1) unstable; urgency=low
 
   * New Maintainer: Alexander Wirt <formorer@debian.org>
   * New Upstream Release
-    + Better Kernel Module managment (Closes: #244241, #242062)
+    + Better Kernel Module management (Closes: #244241, #242062)
   * Fixed description so that new users doesn't get scared (Closes: #243102)
   * Fixed /etc/default/firehol handling (Closes: #245307)
     Thanks Michael Ablassmeier for the patch.
   * Mentioned firehol-wizard in the new README.Debian
   * Moved firehol and firehol-wizard manpages into the correct section
-  * Removed gawk dependancy and set GAWK_CMD to awk in firehol-lib (Closes: #250401)
+  * Removed gawk dependency and set GAWK_CMD to awk in firehol-lib (Closes: #250401)
 
  -- Alexander Wirt <formorer@debian.org>  Sat, 22 May 2004 18:39:45 +0200
 
@@ -298,7 +471,7 @@ firehol (1.132+cvs+20030611-1) unstable; urgency=low
 
 firehol (1.129+cvs+20030601-1) unstable; urgency=low
 
-  * Splitted firehol.sh in 2 scripts (firehol.sh, firehol-wizard.sh),
+  * Split firehol.sh in 2 scripts (firehol.sh, firehol-wizard.sh),
     created a lib and a init-script.
   * Changed startup order to create an iptables firewall before
     configuring the network devices (and stop it after deconfiguring
@@ -317,7 +490,7 @@ firehol (1.128-4) unstable; urgency=low
 firehol (1.128-3) unstable; urgency=low
 
   * Cleaned debian/rules a bit.
-  * Now uses /etc/default/firehol to determine wether it is configured
+  * Now uses /etc/default/firehol to determine whether it is configured
     or not.
 
  -- Marc Brockschmidt <marc@dch-faq.de>  Sun, 05 May 2003 19:53:20 +0200

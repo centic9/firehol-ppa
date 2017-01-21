@@ -1,5 +1,0 @@
-check-iana.sh
-adblock.sh
-examples/*
-debian/RESERVED_IPS
-debian/bittorrent.conf

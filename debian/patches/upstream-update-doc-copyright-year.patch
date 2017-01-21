@@ -1,0 +1,35 @@
+Description: update: documentation: Copyrigh year bump
+ Bump to 2017 the Copyrigt year in documentation; meant to be submitted to
+ the upstream maintainer.
+Origin: vendor, Debian
+Forwarded: https://github.com/firehol/firehol/pull/187
+Author: Jerome Benoit <calculus@rezozer.net>
+Last-Update: 2017-01-21
+
+--- a/doc/firehol/contents.tpl
++++ b/doc/firehol/contents.tpl
+@@ -1,5 +1,5 @@
+ % FireHOL Reference
+-% Copyright (c) 2004,2013-2015 Costa Tsaousis <costa@firehol.org>; Copyright (c) 2012-2015 Phil Whineray <phil@firehol.org>
++% Copyright (c) 2004,2013-2017 Costa Tsaousis <costa@firehol.org>; Copyright (c) 2012-2017 Phil Whineray <phil@firehol.org>
+ % Version VERSION (Built DATE)
+ 
+ \newpage
+--- a/doc/fireqos/contents.md
++++ b/doc/fireqos/contents.md
+@@ -1,5 +1,5 @@
+ % FireQOS Reference
+-% Copyright (c) 2004,2013-2015 Costa Tsaousis <costa@firehol.org>; Copyright (c) 2012-2015 Phil Whineray <phil@firehol.org>
++% Copyright (c) 2004,2013-2017 Costa Tsaousis <costa@firehol.org>; Copyright (c) 2012-2017 Phil Whineray <phil@firehol.org>
+ % Version VERSION (Built DATE)
+ 
+ \newpage
+--- a/doc/vnetbuild/contents.md
++++ b/doc/vnetbuild/contents.md
+@@ -1,5 +1,5 @@
+ % VNetBuild Reference
+-% Copyright (c) Copyright (c) 2012-2015 Phil Whineray <phil@firehol.org>; 2015 Costa Tsaousis <costa@firehol.org>
++% Copyright (c) Copyright (c) 2012-2017 Phil Whineray <phil@firehol.org>; 2017 Costa Tsaousis <costa@firehol.org>
+ % Version VERSION (Built DATE)
+ 
+ \newpage

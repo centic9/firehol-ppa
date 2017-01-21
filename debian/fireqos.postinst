@@ -1,0 +1,19 @@
+#!/bin/sh
+set -e
+if [ -f /etc/fireqos/fireqos.conf ]; then
+	mv -f /etc/fireqos/fireqos.conf /etc/firehol/fireqos.conf
+	echo
+	echo
+	echo "FireQOS has now its configuration in /etc/firehol/fireqos.conf"
+	echo "Your existing configuration has been moved to its new place."
+	echo
+	if (rmdir /etc/fireqos 2> /dev/null); then
+		echo "The now obsolete folder /etc/fireqos has been successfully removed."
+	else
+	  echo "The now obsolete folder /etc/fireqos could not been removed."
+		echo "It is likely that it contains some local material; if so,"
+		echo "you want to consider to move by hand the concerned material"
+		echo "in /etc/firehol and then remove /etc/fireqos."
+	fi
+fi
+#DEBHELPER#

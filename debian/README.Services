@@ -1,10 +1,9 @@
-Adding additional services to firehol
-=====================================
+Adding additional services to FireHOL and FireQOS
+=================================================
 
-Since version 1.214 it is possible to define new
-services with extra config files dropped into
-/etc/firehol/services. Every file with the ending
-.conf gets parsed.
+For FireHOL and FireQOS it is possible to define new services
+with extra config files dropped into /etc/firehol/services.
+Every file with the ending .conf gets parsed.
 
 Any config file should start with a specical header:
 
@@ -12,22 +11,24 @@ Any config file should start with a specical header:
 
 1 is the API version and 213 the minimum version of FireHOL
 the service is expected to work with.
-Inside the configfile you could use any service defintion
-as described at: http://firehol.sourceforge.net/adding.html?
+
+Inside the configuration file you could use any service definition
+as described in firehol.conf(5) (firehol Debian package).
+
 Here a small example for bittorrent:
 
------------------------
+------------------------------------
 #FHVER: 1:213
 server_torrent_ports="tcp/6881:6999"
 client_torrent_ports="default"
------------------------
+------------------------------------
 
-Thats all :). If dropped into /etc/firehol/services
-you could use the torrent service as any builtin service in
-you config.
+That's all :). If dropped into /etc/firehol/services you could
+use the torrent service as any builtin service in you config.
 
-You could find this file under the
-examples dir in /usr/share/doc/firehol.
+You could find this file in the examples dir in /usr/share/doc/firehol-doc
+(resp. /usr/share/doc/fireqos-doc) as distributed in by the firehol-doc
+(resp. fireqos-doc) Debian package.
 
+ -- Jerome Benoit <calculus@rezozer.net>  Mon, 04 Aug 2014 14:37:12 +0000
  -- Alexander Wirt <formorer@debian.org>  Thu, 23 Dec 2004 15:33:52 +0100
-

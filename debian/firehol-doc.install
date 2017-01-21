@@ -1,0 +1,2 @@
+etc/firehol/firehol.conf.example usr/share/doc/firehol-doc/examples/etc
+etc/firehol/services/* usr/share/doc/firehol-doc/examples/etc/services

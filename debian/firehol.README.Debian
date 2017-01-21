@@ -1,0 +1,55 @@
+FireHOL for Debian GNU/Linux
+============================
+
+FireHOL has to be enabled in /etc/default/firehol to
+get started; to enable it set START_FIREHOL to anything
+else than NO/no.
+
+Variables set into /etc/default/firehol are exported into
+by the init script /etc/init.d/firehol, such that they are
+carried out when firehol is launched from it while, otherwise,
+they are generally ignored.
+
+
+Log FireHOL messages to a separate log file with rsyslog [1]
+============================================================
+
+First set FIREHOL_LOG_PREFIX (firehol-variables(5)) to unique,
+distinguishable prefix; let say, for illustration, to "FireHOL: ".
+
+Then create /etc/rsyslog.d/firehol.conf with the following contents:
+
+--8><---------------------------------------------------------------
+:msg, contains, "FireHOL: " -/var/log/firehol/firehol.log
+& stop
+---------------------------------------------------------------><8--
+
+what will make rsyslog to redirect FireHOL messages to the log file
+`/var/log/firehol/firehol.log' within the directory `/var/log/firehol'
+(created by hand).
+
+A concomitant log rotation file may write:
+
+--8><---------------------------------------------------------------
+/var/log/firehol/firehol.log
+{
+	rotate 7
+	daily
+	missingok
+	notifempty
+	delaycompress
+	compress
+	postrotate
+		invoke-rc.d rsyslog rotate > /dev/null
+	endscript
+}
+---------------------------------------------------------------><8--
+
+For more detailed information and discussion, visit the original blog page [1].
+
+You can find these files in the `examples/rsyslog' folder in `/usr/share/doc/firehol-doc/'
+as distributed by the firehol-doc Debian package.
+
+[1] http://blog.shadypixel.com/log-iptables-messages-to-a-separate-file-with-rsyslog/
+
+ -- Jerome Benoit <calculus@rezozer.net>  Wed, 06 Aug 2014 14:14:44 +0000

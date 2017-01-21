@@ -1,0 +1,51 @@
+firehol (2.0.0~rc.1+ds-1) experimental; urgency=medium
+
+  IPv6 is supported, from this major release of FireHOL, besides IPv4.
+
+  Compatibility with older configurations is granted by FireHOL by using
+  a configuration version number, so your former FireHOL configuration
+  may be kept provided its contains a proper version number; the former
+  version was version 5, the new version which adds support for IPv6 is
+  version 6.
+
+  To ease migration from version 5 to version 6, a quick guide is available
+  at firehol.org: http://firehol.org/upgrade/.
+
+  To stick closer to the upstream version, the default configuration file
+  /etc/default/firehol is no more source_d by firehol itself, nevertheless
+  its variables are exported by /etc/init.d/firehol; /etc/init.d/firehol
+  and its concomitant configuration file /etc/default/firehol are Debian
+  specific. The variables that modify the behaviour of firehol are described
+  in the manual firehol-variables(5).
+
+  The opportunity has also been taken to definitely dropped out the material
+  related to the reserved ips data file RESERVED_IPS.
+
+  Note that FireHOL comes now with a traffic shaper companion coined FireQOS
+  which is packaged separately in the Debian package fireqos.
+
+ -- Jerome Benoit <calculus@rezozer.net>  Wed, 06 Aug 2014 12:30:21 +0000
+
+firehol (1.296-1) unstable; urgency=low
+
+  For this release, the list of reserved ips data file RESERVED_IPS is no more
+  mandatory. That will render FireHOL easier.
+  get-iana (a script for updating the list of reserved ips) is no more available
+  system wide.
+  To ease the transition, while the existing RESERVED_IPS and RESERVED_IPS.old
+  files in /etc/firehol are preserved at pre-installation stage with the extra
+  extension .dpkg-bak, the upstream updated get-iana.sh script was put in
+  /usr/share/doc/firehol/examples, along with a minimal version of RESERVED_IPS
+  for who may still need them.
+
+ -- Jerome Benoit <calculus@rezozer.net>  Mon, 11 Mar 2013 10:55:23 +0000
+
+firehol (1.256-1) unstable; urgency=low
+
+  This release reverts the split from firehol into firehol-wizard,firehol and
+  the lib. That will make updates much easier in the future.
+  get-iana (a script for updating the list of reserved ips) is now available
+  you can run it regulary to update your ip list. Its recommended to install
+  the aggregate package to aggregate the ip ranges from the iana.
+
+ -- Alexander Wirt <formorer@debian.org>  Thu, 30 Aug 2007 17:18:22 +0200

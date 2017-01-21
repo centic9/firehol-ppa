@@ -1,0 +1,12 @@
+Document: firehol
+Title: FireHOL Reference
+Author: FireHOL Team
+Abstract: This reference manual documents how to use the FireHOL firewall builder
+Section: Network/Monitoring
+
+Format: PDF
+Files: /usr/share/doc/firehol-doc/firehol-manual.pdf
+
+Format: HTML
+Index: /usr/share/doc/firehol-doc/firehol-manual.html
+Files: /usr/share/doc/firehol-doc/firehol-manual.css

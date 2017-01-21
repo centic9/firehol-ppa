@@ -1,26 +1,28 @@
 #! /bin/sh
 ### BEGIN INIT INFO
 # Provides:          firehol
-# Required-Start:    $network $local_fs $syslog
-# Required-Stop:     $network $local_fs $syslog
+# Required-Start:    $network $remote_fs $syslog
+# Required-Stop:     $network $remote_fs $syslog
 # Default-Start:     2 3 4 5
 # Default-Stop:      0 1 6
 # Description: Starts firehol firewall configuration
 # short-description: firehol firewall configuration
 ### END INIT INFO
 
-#includes lsb functions
-. /lib/lsb/init-functions
-
-PATH=/sbin:/bin
+PATH=/bin:/usr/bin:/sbin:/usr/sbin
 NAME=firehol
-DESC=Firewall
+DESC="firewall"
+SCRIPTNAME=/etc/init.d/$NAME
 
-test -x /sbin/firehol || exit 0
+test -x /usr/sbin/firehol || exit 0
 
-set -e
+[ -r /etc/default/firehol ] && set -a && . /etc/default/firehol
 
-[ -r /etc/default/firehol ] && . /etc/default/firehol
+# load the VERBOSE setting and other rcS variables
+. /lib/init/vars.sh
+
+# include lsb functions
+. /lib/lsb/init-functions
 
 case "$START_FIREHOL" in
   NO|no)
@@ -31,53 +33,88 @@ case "$START_FIREHOL" in
   ;;
 esac
 
+do_start () {
+	# return
+	#  0 000 if firewall has been handled
+	#  1 001 if firewall could not be activated
+	#  4 100 if FireHOL is disabled via /etc/default/firehol
+	[ "$START_FIREHOL" = "NO"  ] && return 4
+	/usr/sbin/firehol start "$@" > /dev/null 2>&1 || return 1
+}
+
+do_stop () {
+	# return
+	#  0 000 if firewall has been cleaned up properly
+	#  1 001 otherwise
+	/usr/sbin/firehol stop > /dev/null 2>&1 || return 1
+}
+
+do_condrestart () {
+	# return
+	#  0 000 if firewall has been handled
+	#  1 001 if firewall could not be activated
+	#  4 100 if FireHOL is disabled via /etc/default/firehol
+	[ "$START_FIREHOL" = "NO"  ] && return 4
+	/usr/sbin/firehol condrestart "$@" > /dev/null 2>&1 || return 1
+}
+
 COMMAND="$1"
-test -n "$1" && shift
+[ "$COMMAND" ] && shift
 
 case "$COMMAND" in
-  start)
-  if [ "$START_FIREHOL" = "NO" ]; then
-    log_warning_msg "$DESC disabled via /etc/default/firehol"
-    exit 0
-  else
-    log_daemon_msg "Starting $DESC" "$NAME"
-    /sbin/firehol start "$@" >/dev/null || log_end_msg 1
-    log_end_msg 0
-  fi
-  ;;
-  stop)
-  log_daemon_msg "Stopping $DESC" "$NAME"
-  /sbin/firehol stop "$@" >/dev/null || log_end_msg 1
-  log_end_msg 0
-  ;;
-  helpme|wizard)
-  log_daemon_msg  "Starting $NAME wizard" 1>&2
-  /sbin/firehol wizard
-  ;;
-  restart|force-reload)
-  if [ "$START_FIREHOL" = "NO" ]; then
-    log_warning_msg "$DESC disabled via /etc/default/firehol"
-    exit 0
-  else
-    log_daemon_msg "Restarting $DESC configuration"
-    /sbin/firehol restart "$@" >/dev/null || log_end_msg 1
-    log_action_end_msg 0
-  fi
-  ;;
-  status)
-  if [ "$START_FIREHOL" = "NO" ]; then
-    log_failure_msg "$DESC disabled via /etc/default/firehol"
-    exit 0
-  else
-    log_success_msg "$DESC enabled via /etc/default/firehol"
-    exit 4
-  fi
-  ;;
-  *)
-  N=/etc/init.d/$NAME
-  log_action_msg "Usage: $N {start|stop|restart|force-reload|status} [<args>]" >&2
-  exit 1
-  ;;
+	start)
+		[ "$VERBOSE" != no ] && log_daemon_msg "Starting $DESC" "$NAME"
+		do_start "$@"
+		case "$?" in
+			0) [ "$VERBOSE" != no ] && log_end_msg 0 ;;
+			1) [ "$VERBOSE" != no ] && log_end_msg 1 ;;
+			4) [ "$VERBOSE" != no ] && { log_progress_msg "disabled, see /etc/default/firehol" ; log_end_msg 255 ; } ;;
+		esac
+	;;
+
+	stop)
+		[ "$VERBOSE" != no ] && log_daemon_msg "Stopping $DESC" "$NAME"
+		do_stop
+		case "$?" in
+			0) [ "$VERBOSE" != no ] && log_end_msg 0 ;;
+			1) [ "$VERBOSE" != no ] && log_end_msg 1 ;;
+		esac
+	;;
+
+	condrestart)
+		log_daemon_msg "Conditionally restarting $DESC" "$NAME"
+		do_condrestart "$@"
+		case "$?" in
+			0) log_end_msg 0 ;;
+			1) log_end_msg 1 ; exit 1 ;;
+			4) log_progress_msg "disabled, see /etc/default/firehol" ; log_end_msg 255 ; ;;
+		esac
+	;;
+
+	restart|force-reload)
+		log_daemon_msg "Restarting $DESC" "$NAME"
+		do_start "$@"
+		case "$?" in
+			0) log_end_msg 0 ;;
+			1) log_end_msg 1 ; exit 1 ;;
+			4) log_progress_msg "disabled, see /etc/default/firehol" ; log_end_msg 255 ; ;;
+		esac
+	;;
+
+	status)
+		if [ "$START_FIREHOL" = "NO" ]; then
+			log_warning_msg "$DESC $NAME disabled via /etc/default/firehol"
+			exit 0
+		else
+			log_success_msg "$DESC $NAME enabled via /etc/default/firehol"
+			exit 4
+		fi
+	;;
+
+	*)
+	echo "Usage: $SCRIPTNAME {start|stop|condrestart|restart|force-reload|status|helpme|wizard} [<args>]" >&2
+	exit 3
+	;;
 esac
 
-exit 0
+:

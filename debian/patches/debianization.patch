@@ -1,0 +1,19 @@
+Description: debianization
+ Meant to maintain a minimal debian/rules, to fix annoying
+ warnings, to address Debian specific stuff in general.
+Origin: vendor, Debian
+Forwarded: not-needed
+Author: Jerome Benoit <calculus@rezozer.net>
+Last-Update: 2017-01-20
+
+--- a/sbin/Makefile.am
++++ b/sbin/Makefile.am
+@@ -1,7 +1,7 @@
+ # Process this file with automake to produce Makefile.in
+ 
+ 
+-inclibdir = @firehollibexecdir@
++inclibdir = $(prefix)/lib/firehol
+ 
+ include $(top_srcdir)/build/subst.inc
+ 

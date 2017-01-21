@@ -1,0 +1,7 @@
+debian/tmp/usr/share/doc/firehol/examples/client-all.conf
+debian/tmp/usr/share/doc/firehol/examples/lan-gateway.conf
+debian/tmp/usr/share/doc/firehol/examples/server-dmz.conf
+debian/tmp/usr/share/doc/firehol/examples/icmpv6.conf
+debian/tmp/usr/share/doc/firehol/examples/office.conf
+debian/tmp/usr/share/doc/firehol/examples/adblock.sh
+debian/examples/*

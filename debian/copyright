@@ -1,23 +1,57 @@
-Format: http://www.debian.org/doc/packaging-manuals/copyright-format/1.0
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0
 Upstream-Name: firehol
 Upstream-Contact:
- Costa Tsaousis <costa@firehol.org>, <costa@tsaousis.gr>
+ Costa Tsaousis <costa@firehol.org>
  Phil Whineray <phil@firehol.org>
-Source: http://firehol.org
-X-Source:
- http://freecode.com/projects/firehol
- http://www.ohloh.net/p/firehol
-X-Upstream-Vcs: http://github.com/ktsaou/firehol
-X-Upstream-Bugs: http://github.com/ktsaou/firehol/issues
+Source: https://firehol.org
+X-Source-Downloaded-From: https://github.com/firehol/firehol/releases
+X-Upstream-Vcs: https://github.com/firehol/firehol.git
+X-Upstream-Bugs: https://github.com/firehol/firehol/issues
+Files-Excluded:
+ doc/tools/pandoc-post
+ doc/vnetbuild/man
+ doc/fireqos/man
+ doc/firehol/man
+ doc/vnetbuild/vnetbuild-manual.html
+ doc/fireqos/fireqos-manual.html
+ doc/firehol/firehol-manual.html
+ doc/vnetbuild/vnetbuild-manual.pdf
+ doc/fireqos/fireqos-manual.pdf
+ doc/firehol/firehol-manual.pdf
+ doc/firehol/firehol-services.5.md
+ doc/firehol/contents.md
+ doc/service-links
+ autotool/install-sh
+ autotool/missing
+ sbin/install.config.in
+ tests/Makefile.in
+ html/ipsets/Makefile.in
+ html/Makefile.in
+ contrib/Makefile.in
+ doc/vnetbuild/Makefile.in
+ doc/fireqos/Makefile.in
+ doc/firehol/Makefile.in
+ doc/Makefile.in
+ examples/Makefile.in
+ etc/Makefile.in
+ sbin/Makefile.in
+ m4/Makefile.in
+ Makefile.in
+ aclocal.m4
+ configure
+Comment:
+ The upstream source tarball is repacked to drop off some substantial
+ weight by mainly cleaning up regenerated files.
 
 Files: *
 Copyright:
-  2003-2013 Costa Tsaousis <costa@tsaousis.gr>
+ 2012-2017 Phil Whineray <phil@firehol.org>
+ 2003-2017 Costa Tsaousis <costa@firehol.org>
 License: GPL-2+
 
 Files: debian/*
 Copyright:
- 2013 Jerome Benoit <calculus@rezozer.net>
+ 2013-2017 Jerome Benoit <calculus@rezozer.net>
  2004-2009 Alexander Wirt <formorer@debian.org>
  2003-2004 Marc Brockschmidt <he@debian.org>
 License: GPL-2+

@@ -1,0 +1,2 @@
+##etc/firehol/fireqos.conf.example usr/share/doc/fireqos-doc/examples/etc
+etc/firehol/services/* usr/share/doc/fireqos-doc/examples/etc/services

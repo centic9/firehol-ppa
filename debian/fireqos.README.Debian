@@ -1,0 +1,26 @@
+FireQOS for Debian GNU/Linu
+===========================
+
+FireQOS has to be enabled in /etc/default/fireqos to
+get started; to enable it set START_FIREQOS to anything
+else than NO/no.
+
+Variables set into /etc/default/fireqos are exported into
+by the init script /etc/init.d/fireqos, such that they are
+carried out when fireqos is launched from it while, otherwise,
+they are generally ignored.
+
+Kernel options for FireQOS
+==========================
+
+FireQOS utilizes the kernel magic, especially the special devices called IFB
+(Intermediate Functional Block): the kernel has to have support for IFB devices
+(either build-in or as module).
+
+First NET_CLS_ACT must be enabled:
+	Networking support -> Networking Options -> QoS and/or fair queueing -> Actions
+then the option IFB:
+	Device Drivers -> Network Device Support -> Intermediate Functional Block support
+
+
+ -- Jerome Benoit <calculus@rezozer.net>  Fri, 20 Jan 2017 20:45:42 +0000

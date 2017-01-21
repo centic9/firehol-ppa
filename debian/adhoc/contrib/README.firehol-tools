@@ -1,0 +1,2 @@
+This contrib directory contains:
+ - dnsbl-ipset.sh : an utility to manage IPSETs using iptables logging and DNSBL lookups.

@@ -1,0 +1,9 @@
+# FireQOS application default file
+# sourced by the initscript `/etc/init.d/fireqos'.
+#
+# See FireQOS Manual for the full list of exportable variables that
+# control the behaviour of FireQOS and their respective description.
+#
+
+# To enable fireqos at startup set START_FIREQOS=YES (init script variable)
+START_FIREQOS=NO
