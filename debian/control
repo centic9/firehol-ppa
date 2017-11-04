@@ -1,9 +1,10 @@
 Source: firehol
 Section: net
 Priority: optional
-Maintainer: Jerome Benoit <calculus@rezozer.net>
+Maintainer: Ubuntu Developers <ubuntu-devel-discuss@lists.ubuntu.com>
+XSBC-Original-Maintainer: Jerome Benoit <calculus@rezozer.net>
 Build-Depends-Indep:
- debhelper (>= 9), autotools-dev, dh-autoreconf,
+ debhelper (>= 10),
  libxml2-utils,
  texlive-base, texlive-latex-recommended, texlive-fonts-recommended, lmodern,
  pandoc,
@@ -12,7 +13,7 @@ Build-Depends-Indep:
  procps,
  curl, wget, whois, jq, unzip, git, graphviz,
  screen
-Standards-Version: 3.9.8
+Standards-Version: 4.1.0
 Homepage: https://firehol.org
 Vcs-Git: https://anonscm.debian.org/git/collab-maint/firehol.git
 Vcs-Browser: https://anonscm.debian.org/cgit/collab-maint/firehol.git

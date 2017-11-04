@@ -31,6 +31,7 @@ MANUALMAN_GENERATED = \
 	man/man5/firehol-client.5 \
 	man/man5/firehol-conf.5 \
 	man/man5/firehol-connmark.5 \
+	man/man5/firehol-cthelper.5 \
 	man/man5/firehol-dscp.5 \
 	man/man5/firehol-group.5 \
 	man/man5/firehol-interface.5 \
@@ -68,6 +69,12 @@ MANUALMAN_GENERATED_INDIRECT = \
 	man/man5/firehol-client46.5 \
 	man/man5/firehol-client6.5 \
 	man/man5/firehol.conf.5 \
+	man/man5/firehol-connmark4.5 \
+	man/man5/firehol-connmark46.5 \
+	man/man5/firehol-connmark6.5 \
+	man/man5/firehol-cthelper4.5 \
+	man/man5/firehol-cthelper46.5 \
+	man/man5/firehol-cthelper6.5 \
 	man/man5/firehol-custom.5 \
 	man/man5/firehol-deny.5 \
 	man/man5/firehol-defaults.conf.5 \
@@ -96,6 +103,9 @@ MANUALMAN_GENERATED_INDIRECT = \
 	man/man5/firehol-loglimit.5 \
 	man/man5/firehol-mac-param.5 \
 	man/man5/firehol-mark-param.5 \
+	man/man5/firehol-mark4.5 \
+	man/man5/firehol-mark46.5 \
+	man/man5/firehol-mark6.5 \
 	man/man5/firehol-outface.5 \
 	man/man5/firehol-physin.5 \
 	man/man5/firehol-physout.5 \

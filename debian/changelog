@@ -1,3 +1,38 @@
+firehol (3.1.5+ds-1ubuntu1) bionic; urgency=medium
+
+  * Merge from Debian unstable.  Remaining changes:
+    - Dont run autotests for now on amd64 until maintainer mode conflicts
+      are bygone with. (Still sort of unstable on pbuilder as yet on amd64)
+
+ -- Bhavani Shankar <bhavi@ubuntu.com>  Sat, 04 Nov 2017 22:27:20 +0530
+
+firehol (3.1.5+ds-1) unstable; urgency=medium
+
+  * New upstream minor version.
+
+ -- Jerome Benoit <calculus@rezozer.net>  Wed, 20 Sep 2017 18:53:05 +0000
+
+firehol (3.1.4+ds-1) unstable; urgency=medium
+
+  * New upstream minor version.
+  * Debianization:
+    - debian/control:
+      - debhelper, bump to 10 (force no-parallel build);
+      - Standards Version, bump to 4.1.0 (no change);
+    - debian/patches/*:
+      - d/p/upstream-*.patch, integrated (thanks to the upstream team);
+    - debian/rules:
+      - dh options, add --no-parallel .
+
+ -- Jerome Benoit <calculus@rezozer.net>  Fri, 01 Sep 2017 07:18:28 +0000
+
+firehol (3.1.1+ds-1ubuntu1) zesty; urgency=medium
+
+  * Dont run autotests for now on amd64 until maintainer mode conflicts
+    are bygone with.
+
+ -- Bhavani Shankar <bhavi@ubuntu.com>  Tue, 04 Apr 2017 12:31:42 +0530
+
 firehol (3.1.1+ds-1) unstable; urgency=medium
 
   * New upstream minor version.
@@ -506,3 +541,4 @@ firehol (1.128-1) unstable; urgency=low
   * Initial Release.
 
  -- Marc Brockschmidt <marc@dch-faq.de>  Thu, 01 May 2003 13:10:00 +0200
+
