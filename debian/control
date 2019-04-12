@@ -1,10 +1,9 @@
 Source: firehol
 Section: net
 Priority: optional
-Maintainer: Ubuntu Developers <ubuntu-devel-discuss@lists.ubuntu.com>
-XSBC-Original-Maintainer: Jerome Benoit <calculus@rezozer.net>
+Maintainer: Jerome Benoit <calculus@rezozer.net>
 Build-Depends-Indep:
- debhelper (>= 10),
+ debhelper (>= 11),
  libxml2-utils,
  texlive-base, texlive-latex-recommended, texlive-fonts-recommended, lmodern,
  pandoc,
@@ -13,13 +12,15 @@ Build-Depends-Indep:
  procps,
  curl, wget, whois, jq, unzip, git, graphviz,
  screen
-Standards-Version: 4.1.0
+Standards-Version: 4.2.1
 Homepage: https://firehol.org
-Vcs-Git: https://anonscm.debian.org/git/collab-maint/firehol.git
-Vcs-Browser: https://anonscm.debian.org/cgit/collab-maint/firehol.git
+Vcs-Git: https://salsa.debian.org/debian/firehol.git
+Vcs-Browser: https://salsa.debian.org/debian/firehol
 
 Package: firehol
 Architecture: all
+Replaces: firehol-doc (<< 3.1.5+ds1-1)
+Breaks: firehol-doc (<< 3.1.5+ds1-1)
 Depends: firehol-common (= ${binary:Version}), lsb-base, ${misc:Depends}
 Recommends: fireqos (= ${binary:Version})
 Suggests: firehol-tools (= ${binary:Version}), firehol-doc (= ${binary:Version}), ulogd2
@@ -53,6 +54,8 @@ Description: easy to use but powerful iptables stateful firewall (docs)
 
 Package: fireqos
 Architecture: all
+Replaces: fireqos-doc (<< 3.1.5+ds1-1)
+Breaks: fireqos-doc (<< 3.1.5+ds1-1)
 Depends: firehol-common (= ${binary:Version}), lsb-base, ${misc:Depends}
 Recommends: firehol (= ${binary:Version})
 Suggests: firehol-tools (= ${binary:Version}), fireqos-doc (= ${binary:Version})
@@ -86,6 +89,8 @@ Description: easy to use but powerful traffic shaping tool (docs)
 
 Package: firehol-tools
 Architecture: all
+Replaces: firehol-tools-doc (<< 3.1.5+ds1-1)
+Breaks: firehol-tools-doc (<< 3.1.5+ds1-1)
 Depends:
  firehol-common (= ${binary:Version}),
  curl, wget, whois, jq, unzip, git, graphviz, screen,

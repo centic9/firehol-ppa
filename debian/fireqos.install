@@ -1,4 +1,5 @@
 usr/lib/firehol/fireqos
+usr/lib/firehol/services.fireqos
 debian/fireqos.conf etc/firehol
 usr/share/doc/firehol/contrib/fireqos.service usr/share/doc/fireqos/examples/contrib/systemd
 debian/adhoc/contrib/systemd/README.fireqos   usr/share/doc/fireqos/examples/contrib/systemd

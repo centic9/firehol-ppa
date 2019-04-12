@@ -1,4 +1,4 @@
-Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Upstream-Name: firehol
 Upstream-Contact:
  Costa Tsaousis <costa@firehol.org>
@@ -8,6 +8,8 @@ X-Source-Downloaded-From: https://github.com/firehol/firehol/releases
 X-Upstream-Vcs: https://github.com/firehol/firehol.git
 X-Upstream-Bugs: https://github.com/firehol/firehol/issues
 Files-Excluded:
+ html/ipsets/*.css
+ html/ipsets/*.html
  doc/tools/pandoc-post
  doc/vnetbuild/man
  doc/fireqos/man
@@ -41,17 +43,19 @@ Files-Excluded:
  configure
 Comment:
  The upstream source tarball is repacked to drop off some substantial
- weight by mainly cleaning up regenerated files.
+ weight by mainly cleaning up regenerated files. The html material in
+ html/ipsets is discarded as it contains prebuilt javascript objects
+ (source-contains-prebuilt-javascript-object lintian tag).
 
 Files: *
 Copyright:
- 2012-2017 Phil Whineray <phil@firehol.org>
- 2003-2017 Costa Tsaousis <costa@firehol.org>
+ 2012-2018 Phil Whineray <phil@firehol.org>
+ 2003-2018 Costa Tsaousis <costa@firehol.org>
 License: GPL-2+
 
 Files: debian/*
 Copyright:
- 2013-2017 Jerome Benoit <calculus@rezozer.net>
+ 2013-2018 Jerome Benoit <calculus@rezozer.net>
  2004-2009 Alexander Wirt <formorer@debian.org>
  2003-2004 Marc Brockschmidt <he@debian.org>
 License: GPL-2+

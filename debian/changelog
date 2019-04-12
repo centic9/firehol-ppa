@@ -1,10 +1,132 @@
-firehol (3.1.5+ds-1ubuntu1) bionic; urgency=medium
+firehol (3.1.6+ds-8) unstable; urgency=medium
 
-  * Merge from Debian unstable.  Remaining changes:
-    - Dont run autotests for now on amd64 until maintainer mode conflicts
-      are bygone with. (Still sort of unstable on pbuilder as yet on amd64)
+  * RC bug fix release (Closes: 926784), use iptable -legacy tools since
+    the default -nft tools are not yet supported by firehol.
 
- -- Bhavani Shankar <bhavi@ubuntu.com>  Sat, 04 Nov 2017 22:27:20 +0530
+ -- Jerome Benoit <calculus@rezozer.net>  Fri, 12 Apr 2019 05:58:29 +0000
+
+firehol (3.1.6+ds-7) unstable; urgency=medium
+
+  * RC bug fix release (Closes: #913844), harden smooth usrmerge transition.
+  * Debianization:
+    - debian/patches/debianization-usrmerge-transition.patch, harden.
+
+ -- Jerome Benoit <calculus@rezozer.net>  Sat, 17 Nov 2018 13:17:32 +0000
+
+firehol (3.1.6+ds-6) unstable; urgency=medium
+
+  * RC bug fix release (Closes: #913552), smooth usrmerge transition.
+  * Debianization:
+    - debian/patches/debianization-usrmerge-transition.patch, introduce.
+
+ -- Jerome Benoit <calculus@rezozer.net>  Thu, 15 Nov 2018 06:36:18 +0000
+
+firehol (3.1.6+ds-5) unstable; urgency=medium
+
+  * FTBR fix release, thanks to Snahil Singh <gitlab@salsa.debian.org>
+    for spotting the issue and bringing a patch.
+  * Debianization:
+    - debian/rules:
+      - pkg-info.mk, include;
+    - debian/patches/*:
+      - d/p/debianization.patch, FTBR fix.
+
+ -- Jerome Benoit <calculus@rezozer.net>  Sun, 11 Nov 2018 23:04:28 +0000
+
+firehol (3.1.6+ds-4) unstable; urgency=medium
+
+  * RC bug fix release (Closes: #912624, #912943), add missing files.
+  * Debianization:
+    - debian/fire{hol,qos}.install, refresh.
+
+ -- Jerome Benoit <calculus@rezozer.net>  Wed, 07 Nov 2018 06:19:38 +0000
+
+firehol (3.1.6+ds-3) unstable; urgency=medium
+
+  * RC bug fix release (Closes: #903303, #912624, #912758), add missing file.
+  * Debianization:
+    - debian/firehol-common.install, update.
+
+ -- Jerome Benoit <calculus@rezozer.net>  Sun, 04 Nov 2018 12:33:30 +0000
+
+firehol (3.1.6+ds-2) unstable; urgency=medium
+
+  * RC bug fix release (Closes: #903303), update services.
+  * Debianization:
+    - debian/*.service, link to contrib/*.service.
+
+ -- Jerome Benoit <calculus@rezozer.net>  Sun, 04 Nov 2018 10:53:52 +0000
+
+firehol (3.1.6+ds-1) unstable; urgency=medium
+
+  * New upstream patch version (Closes: #853950, #881669).
+  * Debianization:
+    - debian/upstream/signing-key.asc, new key;
+    - debian/watch, refresh.
+
+ -- Jerome Benoit <calculus@rezozer.net>  Wed, 31 Oct 2018 21:34:13 +0000
+
+firehol (3.1.5+ds1-3) unstable; urgency=medium
+
+  [ Ondřej Nový ]
+  * d/copyright: Change Format URL to correct one
+
+  [ Jerome Benoit ]
+  * d/control: Bump Standards Version to 4.2.1 (no change)
+  * d/clean: harden
+  * d/s/options: Remove
+
+ -- Jerome Benoit <calculus@rezozer.net>  Wed, 31 Oct 2018 04:03:37 +0000
+
+firehol (3.1.5+ds1-2) unstable; urgency=medium
+
+  * RC bug fix release (Closes: #901102), redundant documents in <PKG>.docs
+    and <PKG>-doc.docs (second attempt).
+  * Debianization:
+    -  debian/control:
+       - Breaks+Replaces fields, harden.
+
+ -- Jerome Benoit <calculus@rezozer.net>  Fri, 22 Jun 2018 20:42:05 +0000
+
+firehol (3.1.5+ds1-1) unstable; urgency=medium
+
+  * RC bug fix release (Closes: #901102), redundant documents in <PKG>.docs
+    and <PKG>-doc.docs.
+  * Debianization:
+    - debian/watch:
+      - repacksuffix, increment;
+    - debian/copyright:
+      - Files-Excluded field, exclude html/ipsets materials;
+    - debian/patches/*:
+      - d/p/debianization.patch , discard html/ipsets in html/Makefile.am ;
+    - debian/fire{hol,qos,hol-tools}-doc.docs, discard documents already
+      furnished by their main packages.
+
+ -- Jerome Benoit <calculus@rezozer.net>  Sat, 09 Jun 2018 13:29:02 +0000
+
+firehol (3.1.5+ds-2) unstable; urgency=medium
+
+  * Debianization:
+    - debian/copyright:
+      - Copyright fields, update year tuples;
+    - debian/control:
+      - debhelper, bump to 11 (refresh d/control, d/rules,
+          and d/*.{doc-base,install,links,dirs});
+      - Standards Version, bump to 4.1.4 (no change);
+      - Vcs-* fields, migration to Salsa;
+    - debian/watch:
+      - option, add repack and compression;
+    - debian/rules:
+      - debhelper targets, refresh;
+      - get-orig-source target, discard;
+    - debian/upstream/, migrate to clear key;
+    - debian/source/include-binaries, discard;
+    - debian/{firehol,fireqos}.service, introduce (copy from contrib);
+    - debian/{firehol,fireqos,firehol-tools}-doc.doc-base, temporarily
+        discard HTML format (due to pandoc html composition issue,
+  	    upstream bug issue #346).
+
+ -- Jerome Benoit <calculus@rezozer.net>  Sat, 26 May 2018 15:22:01 +0000
 
 firehol (3.1.5+ds-1) unstable; urgency=medium
 
@@ -25,13 +147,6 @@ firehol (3.1.4+ds-1) unstable; urgency=medium
       - dh options, add --no-parallel .
 
  -- Jerome Benoit <calculus@rezozer.net>  Fri, 01 Sep 2017 07:18:28 +0000
-
-firehol (3.1.1+ds-1ubuntu1) zesty; urgency=medium
-
-  * Dont run autotests for now on amd64 until maintainer mode conflicts
-    are bygone with.
-
- -- Bhavani Shankar <bhavi@ubuntu.com>  Tue, 04 Apr 2017 12:31:42 +0530
 
 firehol (3.1.1+ds-1) unstable; urgency=medium
 
@@ -541,4 +656,3 @@ firehol (1.128-1) unstable; urgency=low
   * Initial Release.
 
  -- Marc Brockschmidt <marc@dch-faq.de>  Thu, 01 May 2003 13:10:00 +0200
-

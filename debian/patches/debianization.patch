@@ -4,7 +4,7 @@ Description: debianization
 Origin: vendor, Debian
 Forwarded: not-needed
 Author: Jerome Benoit <calculus@rezozer.net>
-Last-Update: 2017-01-20
+Last-Update: 2018-11-12
 
 --- a/sbin/Makefile.am
 +++ b/sbin/Makefile.am
@@ -17,3 +17,25 @@ Last-Update: 2017-01-20
  
  include $(top_srcdir)/build/subst.inc
  
+--- a/html/Makefile.am
++++ b/html/Makefile.am
+@@ -1,3 +1,3 @@
+ # Process this file with automake to produce Makefile.in
+ 
+-SUBDIRS = ipsets
++SUBDIRS = #ipsets
+--- a/configure.ac
++++ b/configure.ac
+@@ -119,7 +119,11 @@
+ 
+ if test x"$USE_MAINTAINER_MODE" = xyes; then
+ AC_MSG_NOTICE(***************** MAINTAINER MODE *****************)
+-PACKAGE_BUILT_DATE=$(date '+%d %b %Y')
++if test -n "$SOURCE_DATE_EPOCH"; then
++	PACKAGE_BUILT_DATE=$(date -u -d "@$SOURCE_DATE_EPOCH" +'%d %b %Y')
++else
++	PACKAGE_BUILT_DATE=$(date '+%d %b %Y')
++fi
+ AX_PROG_XMLLINT([--nonet])
+ 
+ AX_PROG_PANDOC([ -f markdown --toc -N],

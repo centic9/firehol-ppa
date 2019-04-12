@@ -1,0 +1,39 @@
+Description: debianization: force use of iptables-legacy
+Origin: vendor, Debian
+Forwarded: not-needed
+Author: Libor Klepac <libor.klepac@bcom.cz>
+Last-Update: 2019-04-10
+
+--- a/configure.ac
++++ b/configure.ac
+@@ -189,24 +189,24 @@
+ AX_NEED_PROG([IP], [ip], [])
+ fi
+ if test x"$enable_ipv6" = xyes; then
+-AX_CHECK_PROG([IP6TABLES], [ip6tables], [])
++AX_CHECK_PROG([IP6TABLES], [ip6tables-legacy], [])
+ fi
+ if test x"$enable_ipv6" = xyes; then
+-AX_CHECK_PROG([IP6TABLES_RESTORE], [ip6tables-restore], [])
++AX_CHECK_PROG([IP6TABLES_RESTORE], [ip6tables-legacy-restore], [])
+ fi
+ if test x"$enable_ipv6" = xyes; then
+-AX_CHECK_PROG([IP6TABLES_SAVE], [ip6tables-save], [])
++AX_CHECK_PROG([IP6TABLES_SAVE], [ip6tables-legacy-save], [])
+ fi
+ AX_CHECK_PROG([IPRANGE], [iprange], [])
+ AX_CHECK_PROG([IPSET], [ipset], [])
+ if test x"$enable_ipv4" = xyes; then
+-AX_CHECK_PROG([IPTABLES], [iptables], [])
++AX_CHECK_PROG([IPTABLES], [iptables-legacy], [])
+ fi
+ if test x"$enable_ipv4" = xyes; then
+-AX_CHECK_PROG([IPTABLES_RESTORE], [iptables-restore], [])
++AX_CHECK_PROG([IPTABLES_RESTORE], [iptables-legacy-restore], [])
+ fi
+ if test x"$enable_ipv4" = xyes; then
+-AX_CHECK_PROG([IPTABLES_SAVE], [iptables-save], [])
++AX_CHECK_PROG([IPTABLES_SAVE], [iptables-legacy-save], [])
+ fi
+ AX_NEED_PROG([LOGGER], [logger], [])
+ AX_NEED_PROG([LS], [ls], [])

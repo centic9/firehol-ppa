@@ -132,11 +132,11 @@ $RENICE_CMD 10 $$ >/dev/null 2>/dev/null
 
 error() {
 	echo >&2 -e "${COLOR_BGRED}${COLOR_WHITE}${COLOR_BOLD} ERROR ${COLOR_RESET}: ${@}"
-	$LOGGER_CMD -p daemon.info -t "update-ipsets.sh[$$]" "${@}"
+	$LOGGER_CMD -p daemon.err -t "update-ipsets.sh[$$]" "${@}"
 }
 warning() {
 	echo >&2 -e "${COLOR_BGYELLOW}${COLOR_BLACK}${COLOR_BOLD} WARNING ${COLOR_RESET}: ${@}"
-	$LOGGER_CMD -p daemon.info -t "update-ipsets.sh[$$]" "${@}"
+	$LOGGER_CMD -p daemon.warning -t "update-ipsets.sh[$$]" "${@}"
 }
 info() {
 	echo >&2 "${@}"
@@ -337,6 +337,10 @@ PUSH_TO_GIT=${PUSH_TO_GIT-0}
 # ipset will get its own commit, or all files will be
 # committed together
 PUSH_TO_GIT_MERGED=${PUSH_TO_GIT_MERGED-1}
+
+# additional options to add as the git commit/push lines
+PUSH_TO_GIT_COMMIT_OPTIONS=""
+PUSH_TO_GIT_PUSH_OPTIONS=""
 
 # if we will also push github gh-pages
 PUSH_TO_GIT_WEB=${PUSH_TO_GIT_WEB-${PUSH_TO_GIT}}
@@ -666,6 +670,10 @@ cd "${RUN_DIR}"
 
 PROGRAM_COMPLETED=0
 cleanup() {
+	# make sure the cache is saved
+	CACHE_SAVE_ENABLED=1
+	cache_save
+
 	cd "${TMP_DIR}"
 
 	if [ ! -z "${RUN_DIR}" -a -d "${RUN_DIR}" ]
@@ -850,18 +858,18 @@ commit_to_git() {
 			for d in "${to_be_pushed[@]}" set_file_timestamps.sh
 			do
 				echo "${d}..."
-				$GIT_CMD commit "${d}" -m "${date} update"
+				$GIT_CMD commit ${PUSH_TO_GIT_COMMIT_OPTIONS} "${d}" -m "${date} update"
 			done
 		else
 			# we commit all files together
-			$GIT_CMD commit "${to_be_pushed[@]}" set_file_timestamps.sh -m "${date} update"
+			$GIT_CMD commit ${PUSH_TO_GIT_COMMIT_OPTIONS} "${to_be_pushed[@]}" set_file_timestamps.sh -m "${date} update"
 		fi
 
 		if [ ${PUSH_TO_GIT} -ne 0 ]
 		then
 			echo >&2
 			info "Pushing git commits to remote server"
-			$GIT_CMD push
+			$GIT_CMD push ${PUSH_TO_GIT_PUSH_OPTIONS} 
 		fi
 	fi
 }
@@ -1036,30 +1044,31 @@ copyfile() {
 }
 
 geturl() {
-	local file="${1}" reference="${2}" url="${3}" doptions=() ret= http_code= curl_opts= message=
+	local file="${1}" reference="${2}" url="${3}" doptions=() ret= http_code= curl_opts=() message=
 
 	eval "local doptions=(${4})"
 
-	if [ -z "${reference}" ]
+	if [ -z "${reference}" -o ! -f "${reference}" ]
 		then
 		reference="${RUN_DIR}/geturl-reference"
 		$TOUCH_CMD -t 0001010000 "${reference}"
+	else
+		# copy the timestamp of the reference
+		# to our file - we need this to check it later
+		$TOUCH_CMD -r "${reference}" "${file}"
+		curl_opts+=("--time-cond" "${reference}")
 	fi
 
-	# copy the timestamp of the reference
-	# to our file
-	$TOUCH_CMD -r "${reference}" "${file}"
-
-	curl_opts="--silent"
-	[ ${VERBOSE} -eq 1 ] && curl_opts=
+	[ ${VERBOSE} -eq 0 ] && curl_opts+=("--silent")
 
 	downloader_log verbose "curl ${doptions} '${url}'"
 	http_code=$( \
 		$CURL_CMD --connect-timeout ${MAX_CONNECT_TIME} --max-time ${MAX_DOWNLOAD_TIME} \
 			--retry 0 --fail --compressed --user-agent "${USER_AGENT}" \
-			--time-cond "${reference}" --output "${file}" --remote-time \
+			"${curl_opts[@]}" \
+			--output "${file}" --remote-time \
 			--location --referer "http://iplists.firehol.org/" \
-			${curl_opts} --write-out '%{http_code}' "${doptions[@]}" "${url}" \
+			--write-out '%{http_code}' "${doptions[@]}" "${url}" \
 		)
 	ret=$?
 
@@ -1294,7 +1303,10 @@ declare -A IPSET_DOWNLOADER_OPTIONS=()
 # TODO - FIXME
 #declare -A IPSET_PREFIXES=()
 
+CACHE_SAVE_ENABLED=1
 cache_save() {
+	[ ${CACHE_SAVE_ENABLED} -eq 0 ] && return 0
+
 	#info "Saving cache"
 
 	declare -p \
@@ -1345,6 +1357,88 @@ if [ -f "${BASE_DIR}/.cache" ]
 	verbose "Loading cache file: ${BASE_DIR}/.cache"
 	source "${BASE_DIR}/.cache"
 fi
+
+cache_save_metadata_backup() {
+	local ipset="${1}"
+
+	ipset_verbose "${ipset}" "saving metadata backup"
+
+	printf >"${LIB_DIR}/${ipset}/metadata" "\
+IPSET_INFO[${ipset}]=%q\n\
+IPSET_SOURCE[${ipset}]=%q\n\
+IPSET_URL[${ipset}]=%q\n\
+IPSET_FILE[${ipset}]=%q\n\
+IPSET_IPV[${ipset}]=%q\n\
+IPSET_HASH[${ipset}]=%q\n\
+IPSET_MINS[${ipset}]=%q\n\
+IPSET_HISTORY_MINS[${ipset}]=%q\n\
+IPSET_ENTRIES[${ipset}]=%q\n\
+IPSET_IPS[${ipset}]=%q\n\
+IPSET_SOURCE_DATE[${ipset}]=%q\n\
+IPSET_CHECKED_DATE[${ipset}]=%q\n\
+IPSET_PROCESSED_DATE[${ipset}]=%q\n\
+IPSET_CATEGORY[${ipset}]=%q\n\
+IPSET_MAINTAINER[${ipset}]=%q\n\
+IPSET_MAINTAINER_URL[${ipset}]=%q\n\
+IPSET_LICENSE[${ipset}]=%q\n\
+IPSET_GRADE[${ipset}]=%q\n\
+IPSET_PROTECTION[${ipset}]=%q\n\
+IPSET_INTENDED_USE[${ipset}]=%q\n\
+IPSET_FALSE_POSITIVES[${ipset}]=%q\n\
+IPSET_POISONING[${ipset}]=%q\n\
+IPSET_SERVICES[${ipset}]=%q\n\
+IPSET_ENTRIES_MIN[${ipset}]=%q\n\
+IPSET_ENTRIES_MAX[${ipset}]=%q\n\
+IPSET_IPS_MIN[${ipset}]=%q\n\
+IPSET_IPS_MAX[${ipset}]=%q\n\
+IPSET_STARTED_DATE[${ipset}]=%q\n\
+IPSET_CLOCK_SKEW[${ipset}]=%q\n\
+IPSET_DOWNLOAD_FAILURES[${ipset}]=%q\n\
+IPSET_VERSION[${ipset}]=%q\n\
+IPSET_AVERAGE_UPDATE_TIME[${ipset}]=%q\n\
+IPSET_MIN_UPDATE_TIME[${ipset}]=%q\n\
+IPSET_MAX_UPDATE_TIME[${ipset}]=%q\n\
+IPSET_DOWNLOADER[${ipset}]=%q\n\
+IPSET_DOWNLOADER_OPTIONS[${ipset}]=%q\n\
+		" \
+		"${IPSET_INFO[${ipset}]}" \
+		"${IPSET_SOURCE[${ipset}]}" \
+		"${IPSET_URL[${ipset}]}" \
+		"${IPSET_FILE[${ipset}]}" \
+		"${IPSET_IPV[${ipset}]}" \
+		"${IPSET_HASH[${ipset}]}" \
+		"${IPSET_MINS[${ipset}]}" \
+		"${IPSET_HISTORY_MINS[${ipset}]}" \
+		"${IPSET_ENTRIES[${ipset}]}" \
+		"${IPSET_IPS[${ipset}]}" \
+		"${IPSET_SOURCE_DATE[${ipset}]}" \
+		"${IPSET_CHECKED_DATE[${ipset}]}" \
+		"${IPSET_PROCESSED_DATE[${ipset}]}" \
+		"${IPSET_CATEGORY[${ipset}]}" \
+		"${IPSET_MAINTAINER[${ipset}]}" \
+		"${IPSET_MAINTAINER_URL[${ipset}]}" \
+		"${IPSET_LICENSE[${ipset}]}" \
+		"${IPSET_GRADE[${ipset}]}" \
+		"${IPSET_PROTECTION[${ipset}]}" \
+		"${IPSET_INTENDED_USE[${ipset}]}" \
+		"${IPSET_FALSE_POSITIVES[${ipset}]}" \
+		"${IPSET_POISONING[${ipset}]}" \
+		"${IPSET_SERVICES[${ipset}]}" \
+		"${IPSET_ENTRIES_MIN[${ipset}]}" \
+		"${IPSET_ENTRIES_MAX[${ipset}]}" \
+		"${IPSET_IPS_MIN[${ipset}]}" \
+		"${IPSET_IPS_MAX[${ipset}]}" \
+		"${IPSET_STARTED_DATE[${ipset}]}" \
+		"${IPSET_CLOCK_SKEW[${ipset}]}" \
+		"${IPSET_DOWNLOAD_FAILURES[${ipset}]}" \
+		"${IPSET_VERSION[${ipset}]}" \
+		"${IPSET_AVERAGE_UPDATE_TIME[${ipset}]}" \
+		"${IPSET_MIN_UPDATE_TIME[${ipset}]}" \
+		"${IPSET_MAX_UPDATE_TIME[${ipset}]}" \
+		"${IPSET_DOWNLOADER[${ipset}]}" \
+		"${IPSET_DOWNLOADER_OPTIONS[${ipset}]}" \
+		${NULL}
+}
 
 cache_remove_ipset() {
 	local ipset="${1}"
@@ -1436,10 +1530,10 @@ ipset_json() {
 	info="$(echo "${info}" | $SED_CMD "s/)/)\n/g" | $SED_CMD "s|\[\(.*\)\](\(.*\))|<a href=\"\2\">\1</a>|g" | $TR_CMD "\n\t" "  ")"
 	info="${info//\"/\\\"}"
 
-	local file_local=
-	local commit_history=
+	local file_local= commit_history= url=
 	if [ -z "${IPSET_TMP_DO_NOT_REDISTRIBUTE[${ipset}]}" ]
 		then
+		url="${IPSET_URL[${ipset}]}"
 		file_local="${LOCAL_COPY_URL}${IPSET_FILE[${ipset}]}"
 		commit_history="${GITHUB_CHANGES_URL}${IPSET_FILE[${ipset}]}"
 	fi
@@ -1470,7 +1564,7 @@ ipset_json() {
 	"maintainer": "${IPSET_MAINTAINER[${ipset}]}",
 	"maintainer_url": "${IPSET_MAINTAINER_URL[${ipset}]}",
 	"info": "${info}",
-	"source": "${IPSET_URL[${ipset}]}",
+	"source": "${url}",
 	"file": "${IPSET_FILE[${ipset}]}",
 	"history": "${ipset}_history.csv",
 	"geolite2": "${geolite2}",
@@ -1576,7 +1670,7 @@ retention_detect() {
 	# load the ipset retention histogram
 	RETENTION_HISTOGRAM=()
 	RETENTION_HISTOGRAM_REST=()
-	RETENTION_HISTOGRAM_STARTED=
+	RETENTION_HISTOGRAM_STARTED="${IPSET_SOURCE_DATE[${ipset}]}"
 	RETENTION_HISTOGRAM_INCOMPLETE=1
 
 	if [ -f "${LIB_DIR}/${ipset}/histogram" ]
@@ -1963,6 +2057,12 @@ update_web() {
 
 	for x in $(params_sort "${!IPSET_FILE[@]}")
 	do
+		if [ -z "${IPSET_FILE[$x]}" ]
+			then
+			ipset_warning "${x}" "empty filename - skipping it"
+			continue
+		fi
+
 		# remove deleted files
 		if [ ! -f "${IPSET_FILE[$x]}" ]
 			then
@@ -2058,6 +2158,8 @@ update_web() {
 
 		if [ ${to_all} -eq 1 ]
 			then
+			cache_save_metadata_backup "${x}"
+
 			ipset_verbose "${x}" "ipset will be compared with all others"
 			all=("${all[@]}" "${IPSET_FILE[$x]}" "as" "${x}")
 			all_count=$[ all_count + 1 ]
@@ -2288,12 +2390,12 @@ update_web() {
 
 		cd "${WEB_DIR}" || return 1
 		$GIT_CMD add *.json *.csv *.xml
-		$GIT_CMD commit -a -m "$($DATE_CMD -u) update"
+		$GIT_CMD commit ${PUSH_TO_GIT_COMMIT_OPTIONS} -a -m "$($DATE_CMD -u) update"
 
 		if [ ${PUSH_TO_GIT_WEB} -eq 1 ]
 			then
 			echo >&2 "Pushing generated web files to git..."
-			$GIT_CMD push origin gh-pages
+			$GIT_CMD push ${PUSH_TO_GIT_PUSH_OPTIONS} origin gh-pages
 		fi
 
 		cd "${BASE_DIR}" || exit 1
@@ -2404,6 +2506,7 @@ ipset_apply() {
 	return 0
 }
 
+IPSET_PUBLIC_URL=
 ipset_attributes() {
 	local ipset="${1}"
 	shift
@@ -2434,6 +2537,10 @@ ipset_attributes() {
 			false_positives)		IPSET_FALSE_POSITIVES[${ipset}]="${2}" ;;
 			poisoning)				IPSET_POISONING[${ipset}]="${2}" ;;
 			service|services)		IPSET_SERVICES[${ipset}]="${2}" ;;
+
+			# we use IPSET_PUBLIC_URL to replace / hide the actual URL we use
+			public_url)				IPSET_URL[${ipset}]="${2}"; IPSET_PUBLIC_URL="${2}" ;;
+
 			*)						ipset_warning "${ipset}" "unknown ipset option '${1}' with value '${2}'." ;;
 		esac
 
@@ -2489,7 +2596,7 @@ finalize() {
 		info="${category}"
 	fi
 
-	if [ -f "${BASE_DIR}/${dst}" -a ${REPROCESS_ALL} -eq 0 ]
+	if [ -f "${BASE_DIR}/${dst}" -a ! -z "${IPSET_FILE[${ipset}]}" -a ${REPROCESS_ALL} -eq 0 ]
 		then
 		${IPRANGE_CMD} "${BASE_DIR}/${dst}" --diff "${tmp}" --quiet
 		if [ $? -eq 0 ]
@@ -2660,11 +2767,12 @@ EOFHEADER
 		fi
 		# --- END: Fix bug with duplicate setinfo files ---
 
-		echo >"${BASE_DIR}/${ipset}.setinfo" "[${ipset}](${WEB_URL}${ipset})|${info}|${ipv} hash:${hash}|${quantity}|`if [ ! -z "${url}" ]; then echo "updated every $(mins_to_text ${mins}) from [this link](${url})"; fi`"
 		if [ -z "${IPSET_TMP_DO_NOT_REDISTRIBUTE[${ipset}]}" ]
 			then
+			echo >"${BASE_DIR}/${ipset}.setinfo" "[${ipset}](${WEB_URL}${ipset})|${info}|${ipv} hash:${hash}|${quantity}|updated every $(mins_to_text ${mins})`if [ ! -z "${url}" ]; then echo " from [this link](${url})"; fi`"
 			git_add_if_not_already_added "${dst}"
 		else
+			echo >"${BASE_DIR}/${ipset}.setinfo" "[${ipset}](${WEB_URL}${ipset})|${info}|${ipv} hash:${hash}|${quantity}|updated every $(mins_to_text ${mins})"
 			git_ignore_file "${dst}"
 		fi
 	fi
@@ -2684,10 +2792,11 @@ update() {
 			processor="${7-$CAT_CMD}" \
 			category="${8}" \
 			info="${9}" \
-			maintainer="${10}" maintainer_url="${11}"
+			maintainer="${10}" maintainer_url="${11}" force=${REPROCESS_ALL}
 	shift 11
 
 	# read it attributes
+	IPSET_PUBLIC_URL=
 	ipset_attributes "${ipset}" "${@}"
 
 	local	tmp= error=0 now= date= ret= \
@@ -2769,28 +2878,37 @@ update() {
 		# download it
 		download_manager "${ipset}" "${mins}" "${url}"
 		ret=$?
-		if [ $ret -eq ${DOWNLOAD_FAILED} ]
+
+		if [ \( -z "${IPSET_FILE[${ipset}]}" -o ! -f "${BASE_DIR}/${dst}" \) -a -s  "${BASE_DIR}/${src}" ]
+			then
+			force=1
+			ipset_silent "${ipset}" "forced reprocessing (ignoring download status)"
+
+		elif [ ${ret} -eq ${DOWNLOAD_FAILED} ]
 			then
 			ipset_silent "${ipset}" "download manager reports failure"
 			check_file_too_old "${ipset}" "${BASE_DIR}/${dst}"
 			return 1
 
-		elif [ $ret -eq ${DOWNLOAD_NOT_UPDATED} -a ! -f "${BASE_DIR}/${dst}" ]
+		elif [ ${ret} -eq ${DOWNLOAD_NOT_UPDATED} -a ! -f "${BASE_DIR}/${dst}" ]
 			then
+			force=1
 			ipset_silent "${ipset}" "download is the same, but we need to re-process it"
 
-		elif [ $ret -eq ${DOWNLOAD_NOT_UPDATED} -a ${REPROCESS_ALL} -eq 0 ]
+		elif [ ${ret} -eq ${DOWNLOAD_NOT_UPDATED} -a ${force} -eq 0 ]
 			then
 			ipset_silent "${ipset}" "download manager reports not updated source"
 			check_file_too_old "${ipset}" "${BASE_DIR}/${dst}"
 			return 1
 		fi
+
+		[ ! -z "${IPSET_PUBLIC_URL}" ] && url="${IPSET_PUBLIC_URL}"
 	fi
 
 	if [ -f "${BASE_DIR}/${dst}" ]
 		then
 		# check if the source file has been updated
-		if [ ${REPROCESS_ALL} -eq 0 -a ! "${BASE_DIR}/${src}" -nt "${BASE_DIR}/${dst}" ]
+		if [ ${force} -eq 0 -a ! "${BASE_DIR}/${src}" -nt "${BASE_DIR}/${dst}" ]
 		then
 			ipset_notupdated "${ipset}" "source file has not been updated"
 			check_file_too_old "${ipset}" "${BASE_DIR}/${dst}"
@@ -3220,7 +3338,7 @@ rename_ipset ib_isp_sprint iblocklist_isp_sprint
 IP4_MATCH="(((25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])\.){3}(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9]))"
 
 # match a single IPv4 net mask (/32 allowed, /0 not allowed)
-MK4_MATCH="(3[12]|[12][0-9]|[1-9])"
+MK4_MATCH="(3[0-2]|[12][0-9]|[1-9])"
 
 # strict checking of IPv4 IPs - all subnets excluded
 # we remove /32 before matching
@@ -3498,7 +3616,7 @@ gz_proxyrss() {
 
 # extract IPs from the maxmind proxy fraud page
 parse_maxmind_proxy_fraud() {
-	$GREP_CMD "href=\"proxy" |\
+	$GREP_CMD "href=\"high-risk-ip-sample/" |\
 		$CUT_CMD -d '>' -f 2 |\
 		$CUT_CMD -d '<' -f 1
 }
@@ -3534,6 +3652,146 @@ hphosts2ips() {
 		$CUT_CMD -d ' ' -f 2- |\
 		$TR_CMD " " "\n" |\
 		hostname_resolver
+}
+
+geolite2_asn() {
+	if [ -z "${UNZIP_CMD}" ]
+	then
+		ipset_error "geolite2_asn" "Command 'unzip' is not installed."
+		return 1
+	fi
+
+	cd "${RUN_DIR}" || return 1
+
+	local ipset="geolite2_asn" limit="" hash="net" ipv="ipv4" \
+		mins=$[24 * 60 * 7] history_mins=0 \
+		url="http://geolite.maxmind.com/download/geoip/database/GeoLite2-ASN-CSV.zip" \
+		info="[MaxMind GeoLite2 ASN](https://dev.maxmind.com/geoip/geoip2/geolite2/)" \
+		ret=
+
+	ipset_shall_be_run "${ipset}"
+	case "$?" in
+		0)	;;
+
+		1)	[ -d "${BASE_DIR}/.git" ] && echo >"${BASE_DIR}/${ipset}.setinfo" "${ipset}|${info}|${ipv} hash:${hash}|disabled|`if [ ! -z "${url}" ]; then echo "updated every $(mins_to_text ${mins}) from [this link](${url})"; fi`"
+			return 1
+			;;
+
+		*)	return 1
+			;;
+	esac
+
+	# download it
+	download_manager "${ipset}" "${mins}" "${url}"
+	ret=$?
+	if [ $ret -eq ${DOWNLOAD_FAILED} -o $ret -eq ${DOWNLOAD_NOT_UPDATED} ]
+		then
+		[ ! -s "${BASE_DIR}/${ipset}.source" ] && return 1
+		[ -d "${BASE_DIR}/${ipset}" -a ${REPROCESS_ALL} -eq 0 ] && return 1
+	fi
+
+	# create a temp dir
+	[ -d "${ipset}.tmp" ] && $RM_CMD -rf "${ipset}.tmp"
+	$MKDIR_CMD "${ipset}.tmp" || return 1
+	cd "${ipset}.tmp" || return 1
+
+	# create the final dir
+	if [ ! -d "${BASE_DIR}/${ipset}" ]
+	then
+		$MKDIR_CMD "${BASE_DIR}/${ipset}" || return 1
+	fi
+
+	# get the old version of README-EDIT.md, if any
+	if [ -d "${BASE_DIR}/.git" -a ! -f "${BASE_DIR}/${ipset}/README-EDIT.md" ]
+		then
+		$GIT_CMD -C "${BASE_DIR}" checkout ${ipset}/README-EDIT.md >/dev/null 2>&1
+		if [ ! -f ${ipset}/README-EDIT.md ]
+			then
+			$TOUCH_CMD ${ipset}/README-EDIT.md
+			git_add_if_not_already_added ${ipset}/README-EDIT.md
+		fi
+	fi
+
+	# extract it
+
+	# The ASN db has the following columns:
+	# 1. network 				the subnet
+	# 2. autonomous_system_number 			the ASN
+	# 3. autonomous_system_organization 	the name of the company that owns this ASN
+
+	ipset_info "${ipset}" "extracting ASN netsets..."
+	$UNZIP_CMD -jpx "${BASE_DIR}/${ipset}.source" "*/GeoLite2-ASN-Blocks-IPv4.csv" |\
+		$GAWK_CMD -F, '{ print $1 >>$2".source.tmp"; close($2".source.tmp"); }'
+
+	# remove the files created of the header line
+	[ -f "ASautonomous_system_number.source.tmp"         ] && $RM_CMD "ASautonomous_system_number.source.tmp"
+
+	ipset_info "${ipset}" "extracting ASN names..."
+	$UNZIP_CMD -jpx "${BASE_DIR}/${ipset}.source" "*/GeoLite2-ASN-Blocks-IPv4.csv" |\
+		$CUT_CMD -d ',' -f 2,3- |\
+		$SORT_CMD -u |\
+		$TR_CMD '`$' "'_" |\
+		$SED_CMD -e 's|"||g' -e "s|^\([0-9]\+\),\(.*\)$|geolite2_asn_names[\1]=\"\2\"|g" |\
+		$GREP_CMD "^geolite2_asn_names" >names.sh
+
+	ipset_info "${ipset}" "reading ASN names..."
+	declare -A geolite2_asn_names=()
+	source names.sh
+	$RM_CMD names.sh
+
+	CACHE_SAVE_ENABLED=0
+	ipset_info "${ipset}" "generating ASN netsets..."
+	local x i info2 tmp
+	for x in *.source.tmp
+	do
+		i="AS${x/.source.tmp/}"
+		tmp="${i}.source"
+
+		ipset_verbose "${i}" "Generating file '${tmp}'"
+
+		$CAT_CMD "${x}" |\
+			filter_all4 |\
+			${IPRANGE_CMD} |\
+			filter_invalid4 >"${tmp}"
+
+		$TOUCH_CMD -r "${BASE_DIR}/${ipset}.source" "${tmp}"
+		$RM_CMD "${x}"
+
+		info2="${geolite2_asn_names[${i/AS/}]} -- ${info}"
+
+		finalize "${i}" \
+			"${tmp}" \
+			"${ipset}.source" \
+			"${ipset}/${i}.netset" \
+			"${mins}" \
+			"${history_mins}" \
+			"${ipv}" \
+			"${limit}" \
+			"${hash}" \
+			"${url}" \
+			"geolocation" \
+			"${info2}" \
+			"MaxMind.com" \
+			"http://www.maxmind.com/" \
+			service "geolocation"
+
+		[ -f "${BASE_DIR}/${i}.setinfo" ] && $MV_CMD -f "${BASE_DIR}/${i}.setinfo" "${BASE_DIR}/${ipset}/${i}.setinfo"
+
+	done
+	CACHE_SAVE_ENABLED=1
+	cache_save
+
+	if [ -d "${BASE_DIR}/.git" ]
+	then
+		# generate a setinfo for the home page
+		echo >"${BASE_DIR}/${ipset}.setinfo" "[${ipset}](${GITHUB_SETINFO}geolite2_asn)|[MaxMind GeoLite2](http://dev.maxmind.com/geoip/geoip2/geolite2/) databases are free IP to ASN (Autonomous System Number) databases.|ipv4 hash:net|All the world|`if [ ! -z "${url}" ]; then echo "updated every $(mins_to_text ${mins}) from [this link](${url})"; fi`"
+	fi
+
+	# remove the temporary dir
+	cd "${RUN_DIR}"
+	$RM_CMD -rf "${ipset}.tmp"
+
+	return 0
 }
 
 geolite2_country() {
@@ -3663,6 +3921,7 @@ geolite2_country() {
 	printf "%s" "Anonymous Service Providers" >"anonymous.source.tmp.info"
 	printf "%s" "Satellite Service Providers" >"satellite.source.tmp.info"
 
+	CACHE_SAVE_ENABLED=0
 	ipset_info "${ipset}" "aggregating country and continent netsets..."
 	local x i info2 tmp
 	for x in *.source.tmp
@@ -3701,6 +3960,8 @@ geolite2_country() {
 		[ -f "${BASE_DIR}/${i}.setinfo" ] && $MV_CMD -f "${BASE_DIR}/${i}.setinfo" "${BASE_DIR}/${ipset}/${i}.setinfo"
 
 	done
+	CACHE_SAVE_ENABLED=1
+	cache_save
 
 	if [ -d "${BASE_DIR}/.git" ]
 	then
@@ -4364,6 +4625,8 @@ echo >&2
 
 geolite2_country
 
+geolite2_asn
+
 
 # -----------------------------------------------------------------------------
 # IPDeny.com
@@ -4389,6 +4652,9 @@ ipip_country
 #atlas_parser() { ${EGREP_CMD} "^${IP4_MATCH}, \"" | ${CUT_CMD} -d ',' -f 1; }
 
 delete_ipset atlas_attacks
+delete_ipset atlas_attacks_2d
+delete_ipset atlas_attacks_7d
+delete_ipset atlas_attacks_30d
 #update atlas_attacks $[24 * 60] "$[48*60] $[7*24*60] $[30*24*60]" ipv4 ip \
 #	"https://atlas.arbor.net/summary/attacks.csv" \
 #	atlas_parser \
@@ -4396,6 +4662,9 @@ delete_ipset atlas_attacks
 #	"Arbor Networks" "https://atlas.arbor.net/"
 
 delete_ipset atlas_botnets
+delete_ipset atlas_botnets_2d
+delete_ipset atlas_botnets_7d
+delete_ipset atlas_botnets_30d
 #update atlas_botnets $[24 * 60] "$[48*60] $[7*24*60] $[30*24*60]" ipv4 ip \
 #	"https://atlas.arbor.net/summary/botnets.csv" \
 #	atlas_parser \
@@ -4403,6 +4672,9 @@ delete_ipset atlas_botnets
 #	"Arbor Networks" "https://atlas.arbor.net/"
 
 delete_ipset atlas_fastflux
+delete_ipset atlas_fastflux_2d
+delete_ipset atlas_fastflux_7d
+delete_ipset atlas_fastflux_30d
 #update atlas_fastflux $[24 * 60] "$[48*60] $[7*24*60] $[30*24*60]" ipv4 ip \
 #	"https://atlas.arbor.net/summary/fastflux.csv" \
 #	atlas_parser \
@@ -4410,6 +4682,9 @@ delete_ipset atlas_fastflux
 #	"Arbor Networks" "https://atlas.arbor.net/"
 
 delete_ipset atlas_phishing
+delete_ipset atlas_phishing_2d
+delete_ipset atlas_phishing_7d
+delete_ipset atlas_phishing_30d
 #update atlas_phishing $[24 * 60] "$[48*60] $[7*24*60] $[30*24*60]" ipv4 ip \
 #	"https://atlas.arbor.net/summary/phishing.csv" \
 #	atlas_parser \
@@ -4417,6 +4692,9 @@ delete_ipset atlas_phishing
 #	"Arbor Networks" "https://atlas.arbor.net/"
 
 delete_ipset atlas_scans
+delete_ipset atlas_scans_2d
+delete_ipset atlas_scans_7d
+delete_ipset atlas_scans_30d
 #update atlas_scans $[24 * 60] "$[48*60] $[7*24*60] $[30*24*60]" ipv4 ip \
 #	"https://atlas.arbor.net/summary/scans.csv" \
 #	atlas_parser \
@@ -5124,7 +5402,7 @@ update myip $[24*60] 0 ipv4 ip \
 update bogons $[24*60] 0 ipv4 both \
 	"http://www.team-cymru.org/Services/Bogons/bogon-bn-agg.txt" \
 	remove_comments \
-	"unrouteable" \
+	"unroutable" \
 	"[Team-Cymru.org](http://www.team-cymru.org) private and reserved addresses defined by RFC 1918, RFC 5735, and RFC 6598 and netblocks that have not been allocated to a regional internet registry" \
 	"Team Cymru" "http://www.team-cymru.org/" \
 	dont_redistribute
@@ -5137,7 +5415,7 @@ update bogons $[24*60] 0 ipv4 both \
 update fullbogons $[24*60] 0 ipv4 both \
 	"http://www.team-cymru.org/Services/Bogons/fullbogons-ipv4.txt" \
 	remove_comments \
-	"unrouteable" \
+	"unroutable" \
 	"[Team-Cymru.org](http://www.team-cymru.org) IP space that has been allocated to an RIR, but not assigned by that RIR to an actual ISP or other end-user" \
 	"Team Cymru" "http://www.team-cymru.org/" \
 	dont_redistribute
@@ -5145,7 +5423,7 @@ update fullbogons $[24*60] 0 ipv4 both \
 #update fullbogons6 $[24*60-10] ipv6 both \
 #	"http://www.team-cymru.org/Services/Bogons/fullbogons-ipv6.txt" \
 #	remove_comments \
-#	"unrouteable" \
+#	"unroutable" \
 #	"Team-Cymru.org provided" \
 #	"Team Cymru" "http://www.team-cymru.org/" \
 #	dont_redistribute
@@ -5156,7 +5434,7 @@ update fullbogons $[24*60] 0 ipv4 both \
 update cidr_report_bogons $[24*60] 0 ipv4 both \
 	"http://www.cidr-report.org/bogons/freespace-prefix.txt" \
 	remove_comments \
-	"unrouteable" \
+	"unroutable" \
 	"Unallocated (Free) Address Space, generated on a daily basis using the IANA registry files, the Regional Internet Registry stats files and the Regional Internet Registry whois data." \
 	"CIDR-Report.org" "http://www.cidr-report.org"
 
@@ -5254,14 +5532,15 @@ update proxylists 60 "$[24*60] $[7*24*60] $[30*24*60]" ipv4 ip \
 # Open Proxies from proxyspy.net
 # http://spys.ru/en/
 
-parse_proxyspy() { remove_comments | $CUT_CMD -d ':' -f 1; }
+#parse_proxyspy() { remove_comments | $CUT_CMD -d ':' -f 1; }
 
-update proxyspy 60 "$[24*60] $[7*24*60] $[30*24*60]" ipv4 ip \
-	"http://txt.proxyspy.net/proxy.txt" \
-	parse_proxyspy \
-	"anonymizers" \
-	"[ProxySpy](http://spys.ru/en/) open proxies (updated hourly)" \
-	"ProxySpy (spys.ru)" "http://spys.ru/en/"
+delete_ipset proxyspy
+#update proxyspy 60 "$[24*60] $[7*24*60] $[30*24*60]" ipv4 ip \
+#	"http://txt.proxyspy.net/proxy.txt" \
+#	parse_proxyspy \
+#	"anonymizers" \
+#	"[ProxySpy](http://spys.ru/en/) open proxies (updated hourly)" \
+#	"ProxySpy (spys.ru)" "http://spys.ru/en/"
 
 
 # -----------------------------------------------------------------------------
@@ -5278,14 +5557,14 @@ update proxyrss $[4*60] "$[24*60] $[7*24*60] $[30*24*60]" ipv4 ip \
 
 # -----------------------------------------------------------------------------
 # Anonymous Proxies
-# https://www.maxmind.com/en/anonymous-proxy-fraudulent-ip-address-list
+# was: https://www.maxmind.com/en/anonymous-proxy-fraudulent-ip-address-list
 
 update maxmind_proxy_fraud $[4*60] 0 ipv4 ip \
-	"https://www.maxmind.com/en/anonymous-proxy-fraudulent-ip-address-list" \
+	"https://www.maxmind.com/en/high-risk-ip-sample-list" \
 	parse_maxmind_proxy_fraud \
 	"anonymizers" \
-	"[MaxMind.com](https://www.maxmind.com/en/anonymous-proxy-fraudulent-ip-address-list) list of anonymous proxy fraudelent IP addresses." \
-	"MaxMind.com" "https://www.maxmind.com/en/anonymous-proxy-fraudulent-ip-address-list"
+	"[MaxMind.com](https://www.maxmind.com/en/high-risk-ip-sample-list) sample list of high-risk IP addresses." \
+	"MaxMind.com" "https://www.maxmind.com/en/high-risk-ip-sample-list"
 
 
 # -----------------------------------------------------------------------------
@@ -5447,14 +5726,16 @@ update iw_spamlist 60 0 ipv4 ip \
 	antispam_ips \
 	"spam" \
 	"[ImproWare Antispam](http://antispam.imp.ch/) IPs sending spam, in the last 3 days" \
-	"ImproWare Antispam" "http://antispam.imp.ch/"
+	"ImproWare Antispam" "http://antispam.imp.ch/" \
+	can_be_empty
 
 update iw_wormlist 60 0 ipv4 ip \
 	"http://antispam.imp.ch/wormlist" \
 	antispam_ips \
 	"spam" \
 	"[ImproWare Antispam](http://antispam.imp.ch/) IPs sending emails with viruses or worms, in the last 3 days" \
-	"ImproWare Antispam" "http://antispam.imp.ch/"
+	"ImproWare Antispam" "http://antispam.imp.ch/" \
+	can_be_empty
 
 
 # -----------------------------------------------------------------------------
@@ -5604,12 +5885,46 @@ delete_ipset virbl
 # AutoShun.org
 # http://www.autoshun.org/
 
-update shunlist $[4*60] 0 ipv4 ip \
-	"http://www.autoshun.org/files/shunlist.csv" \
-	csv_comma_first_column \
-	"attacks" \
-	"[AutoShun.org](http://autoshun.org/) IPs identified as hostile by correlating logs from distributed snort installations running the autoshun plugin" \
-	"AutoShun.org" "http://autoshun.org/"
+if [ ! -z "${AUTOSHUN_API_KEY}" ]
+	then
+	update shunlist $[4*60] 0 ipv4 ip \
+		"https://www.autoshun.org/download/?api_key=${AUTOSHUN_API_KEY}&format=csv" \
+		csv_comma_first_column \
+		"attacks" \
+		"[AutoShun.org](http://autoshun.org/) IPs identified as hostile by correlating logs from distributed snort installations running the autoshun plugin" \
+		"AutoShun.org" "http://autoshun.org/" \
+		license "Creative Commons Attribution-NonCommercial-NoDerivatives 4.0 International License" \
+		dont_redistribute \
+		dont_enable_with_all \
+		no_if_modified_since
+fi
+
+
+# -----------------------------------------------------------------------------
+# ip2proxy lite
+# https://lite.ip2location.com/
+
+ip2location_ip2proxy_px1lite() {
+	$CAT_CMD >"${RUN_DIR}/ip2location_ip2proxy_px1lite.zip"
+	$UNZIP_CMD -jpx "${RUN_DIR}/ip2location_ip2proxy_px1lite.zip" "IP2PROXY-LITE-PX1.CSV" |\
+		$CUT_CMD -d ',' -f 1,2 |\
+		$TR_CMD '",' ' -' |\
+		$IPRANGE_CMD
+}
+
+if [ ! -z "${IP2LOCATION_API_KEY}" ]
+	then
+	update ip2proxy_px1lite $[24*60] 0 ipv4 both \
+		"http://www.ip2location.com/download/?token=${IP2LOCATION_API_KEY}&file=PX1LITE" \
+		ip2location_ip2proxy_px1lite \
+		"anonymizers" \
+		"[IP2Location.com](https://lite.ip2location.com/database/px1-ip-country) IP2Proxy LITE IP-COUNTRY Database contains IP addresses which are used as public proxies. The LITE edition is a free version of database that is limited to public proxies IP address." \
+		"IP2Location.com" "https://lite.ip2location.com/database/px1-ip-country" \
+		license "Creative Commons Attribution 4.0 International Public License" \
+		public_url "http://www.ip2location.com/download/?token=APIKEY&file=PX1LITE" \
+		dont_enable_with_all \
+		dont_redistribute
+fi
 
 
 # -----------------------------------------------------------------------------
@@ -5733,31 +6048,34 @@ update dataplane_dnsversion 60 0 ipv4 ip \
 # HTTP report
 # http://www.dragonresearchgroup.org/
 
-dragon_column3() { remove_comments | $CUT_CMD -d '|' -f 3 | trim; }
+#dragon_column3() { remove_comments | $CUT_CMD -d '|' -f 3 | trim; }
 
-update dragon_http 60 0 ipv4 both \
-	"http://www.dragonresearchgroup.org/insight/http-report.txt" \
-	dragon_column3 \
-	"attacks" \
-	"[Dragon Research Group](http://www.dragonresearchgroup.org/) IPs that have been seen sending HTTP requests to Dragon Research Pods in the last 7 days. This report lists hosts that are highly suspicious and are likely conducting malicious HTTP attacks. LEGITIMATE SEARCH ENGINE BOTS MAY BE IN THIS LIST. This report is informational.  It is not a blacklist, but some operators may choose to use it to help protect their networks and hosts in the forms of automated reporting and mitigation services." \
-	"Dragon Research Group (DRG)" "http://www.dragonresearchgroup.org/" \
-	dont_redistribute
+delete_ipset dragon_http
+#update dragon_http 60 0 ipv4 both \
+#	"http://www.dragonresearchgroup.org/insight/http-report.txt" \
+#	dragon_column3 \
+#	"attacks" \
+#	"[Dragon Research Group](http://www.dragonresearchgroup.org/) IPs that have been seen sending HTTP requests to Dragon Research Pods in the last 7 days. This report lists hosts that are highly suspicious and are likely conducting malicious HTTP attacks. LEGITIMATE SEARCH ENGINE BOTS MAY BE IN THIS LIST. This report is informational.  It is not a blacklist, but some operators may choose to use it to help protect their networks and hosts in the forms of automated reporting and mitigation services." \
+#	"Dragon Research Group (DRG)" "http://www.dragonresearchgroup.org/" \
+#	dont_redistribute
 
-update dragon_sshpauth 60 0 ipv4 both \
-	"https://www.dragonresearchgroup.org/insight/sshpwauth.txt" \
-	dragon_column3 \
-	"attacks" \
-	"[Dragon Research Group](http://www.dragonresearchgroup.org/) IP address that has been seen attempting to remotely login to a host using SSH password authentication, in the last 7 days. This report lists hosts that are highly suspicious and are likely conducting malicious SSH password authentication attacks." \
-	"Dragon Research Group (DRG)" "http://www.dragonresearchgroup.org/" \
-	dont_redistribute
+delete_ipset dragon_sshpauth
+#update dragon_sshpauth 60 0 ipv4 both \
+#	"https://www.dragonresearchgroup.org/insight/sshpwauth.txt" \
+#	dragon_column3 \
+#	"attacks" \
+#	"[Dragon Research Group](http://www.dragonresearchgroup.org/) IP address that has been seen attempting to remotely login to a host using SSH password authentication, in the last 7 days. This report lists hosts that are highly suspicious and are likely conducting malicious SSH password authentication attacks." \
+#	"Dragon Research Group (DRG)" "http://www.dragonresearchgroup.org/" \
+#	dont_redistribute
 
-update dragon_vncprobe 60 0 ipv4 both \
-	"https://www.dragonresearchgroup.org/insight/vncprobe.txt" \
-	dragon_column3 \
-	"attacks" \
-	"[Dragon Research Group](http://www.dragonresearchgroup.org/) IP address that has been seen attempting to remotely connect to a host running the VNC application service, in the last 7 days. This report lists hosts that are highly suspicious and are likely conducting malicious VNC probes or VNC brute force attacks." \
-	"Dragon Research Group (DRG)" "http://www.dragonresearchgroup.org/" \
-	dont_redistribute
+delete_ipset dragon_vncprobe
+#update dragon_vncprobe 60 0 ipv4 both \
+#	"https://www.dragonresearchgroup.org/insight/vncprobe.txt" \
+#	dragon_column3 \
+#	"attacks" \
+#	"[Dragon Research Group](http://www.dragonresearchgroup.org/) IP address that has been seen attempting to remotely connect to a host running the VNC application service, in the last 7 days. This report lists hosts that are highly suspicious and are likely conducting malicious VNC probes or VNC brute force attacks." \
+#	"Dragon Research Group (DRG)" "http://www.dragonresearchgroup.org/" \
+#	dont_redistribute
 
 
 # -----------------------------------------------------------------------------
@@ -5870,12 +6188,13 @@ update vxvault $[12 * 60] 0 ipv4 ip \
 # -----------------------------------------------------------------------------
 # Bitcoin connected hosts
 
-update bitcoin_blockchain_info 10 "$[24*60] $[7*24*60] $[30*24*60]" ipv4 ip \
-	"https://blockchain.info/en/connected-nodes" \
-	extract_ipv4_from_any_file \
-	"organizations" \
-	"[Blockchain.info](https://blockchain.info/en/connected-nodes) Bitcoin nodes connected to Blockchain.info." \
-	"Blockchain.info" "https://blockchain.info/en/connected-nodes"
+delete_ipset bitcoin_blockchain_info
+#update bitcoin_blockchain_info 10 "$[24*60] $[7*24*60] $[30*24*60]" ipv4 ip \
+#	"https://blockchain.info/en/connected-nodes" \
+#	extract_ipv4_from_any_file \
+#	"organizations" \
+#	"[Blockchain.info](https://blockchain.info/en/connected-nodes) Bitcoin nodes connected to Blockchain.info." \
+#	"Blockchain.info" "https://blockchain.info/en/connected-nodes"
 
 update bitcoin_nodes 10 "$[24*60] $[7*24*60] $[30*24*60]" ipv4 ip \
 	"https://getaddr.bitnodes.io/api/v1/snapshots/latest/" \
@@ -5898,13 +6217,15 @@ update bds_atif $[24*60] 0 ipv4 ip \
 
 # -----------------------------------------------------------------------------
 # TrustedSec.com
+# https://github.com/firehol/blocklist-ipsets/issues/47
 
-update trustedsec_atif $[24*60] 0 ipv4 ip \
-	"https://www.trustedsec.com/banlist.txt" \
-	remove_comments \
-	"reputation" \
-	"Artillery Threat Intelligence Feed and Banlist Feed" \
-	"TrustedSec" "https://www.trustedsec.com/"
+delete_ipset trustedsec_atif
+#update trustedsec_atif $[24*60] 0 ipv4 ip \
+#	"https://www.trustedsec.com/banlist.txt" \
+#	remove_comments \
+#	"reputation" \
+#	"Artillery Threat Intelligence Feed and Banlist Feed" \
+#	"TrustedSec" "https://www.trustedsec.com/"
 
 
 # -----------------------------------------------------------------------------
@@ -5964,54 +6285,57 @@ update nullsecure $[8*60] 0 ipv4 ip \
 # -----------------------------------------------------------------------------
 # http://www.chaosreigns.com/
 
-parse_chaosreigns_once() {
-	local wanted="${1}"
+#parse_chaosreigns_once() {
+#	local wanted="${1}"
+#
+#	if [ ! -f "${RUN_DIR}/${wanted}.source" ]
+#		then
+#		# parse the source and split it to all files in RUN_DIR
+#		$GAWK_CMD	>&2 "
+#			/^[[:space:]]*[[:digit:]\./]+[[:space:]]+100[[:space:]]+[[:digit:]]+\$/          { print \$1 >\"${RUN_DIR}/chaosreigns_iprep100.source\"; next; }
+#			/^[[:space:]]*[[:digit:]\./]+[[:space:]]+0[[:space:]]+[[:digit:]]+\$/            { print \$1 >\"${RUN_DIR}/chaosreigns_iprep0.source\"; next; }
+#			/^[[:space:]]*[[:digit:]\./]+[[:space:]]+[[:digit:]]+[[:space:]]+[[:digit:]]+\$/ { print \$1 >\"${RUN_DIR}/chaosreigns_iprep50.source\"; next; }
+#			// { print \$1 >\"${RUN_DIR}/chaosreigns_iprep_invalid.source\"; next; }
+#			"
+#	else
+#		# ignore the source being fed to us
+#		$CAT_CMD >/dev/null
+#	fi
+#	
+#	# give the parsed output
+#	$CAT_CMD "${RUN_DIR}/${wanted}.source"
+#
+#	# make sure all the variations have the same source
+#	ipsets_with_common_source_file "chaosreigns_iprep100" "chaosreigns_iprep50" "chaosreigns_iprep0"
+#}
 
-	if [ ! -f "${RUN_DIR}/${wanted}.source" ]
-		then
-		# parse the source and split it to all files in RUN_DIR
-		$GAWK_CMD	>&2 "
-			/^[[:space:]]*[[:digit:]\./]+[[:space:]]+100[[:space:]]+[[:digit:]]+\$/          { print \$1 >\"${RUN_DIR}/chaosreigns_iprep100.source\"; next; }
-			/^[[:space:]]*[[:digit:]\./]+[[:space:]]+0[[:space:]]+[[:digit:]]+\$/            { print \$1 >\"${RUN_DIR}/chaosreigns_iprep0.source\"; next; }
-			/^[[:space:]]*[[:digit:]\./]+[[:space:]]+[[:digit:]]+[[:space:]]+[[:digit:]]+\$/ { print \$1 >\"${RUN_DIR}/chaosreigns_iprep50.source\"; next; }
-			// { print \$1 >\"${RUN_DIR}/chaosreigns_iprep_invalid.source\"; next; }
-			"
-	else
-		# ignore the source being fed to us
-		$CAT_CMD >/dev/null
-	fi
-	
-	# give the parsed output
-	$CAT_CMD "${RUN_DIR}/${wanted}.source"
+#parse_chaosreigns_iprep100() { parse_chaosreigns_once chaosreigns_iprep100; }
+#parse_chaosreigns_iprep50()  { parse_chaosreigns_once chaosreigns_iprep50;  }
+#parse_chaosreigns_iprep0()   { parse_chaosreigns_once chaosreigns_iprep0;   }
 
-	# make sure all the variations have the same source
-	ipsets_with_common_source_file "chaosreigns_iprep100" "chaosreigns_iprep50" "chaosreigns_iprep0"
-}
+delete_ipset chaosreigns_iprep100
+#update chaosreigns_iprep100 $[24*60] 0 ipv4 ip \
+#	"http://www.chaosreigns.com/iprep/iprep.txt" \
+#	parse_chaosreigns_iprep100 \
+#	"spam" \
+#	"[ChaosReigns.com](http://www.chaosreigns.com/iprep) The iprep100 list includes all IPs that sent 100% ham emails. This is an automated, free, public email IP reputation system. The primary goal is a whitelist. Other data is provided as a consequence." \
+#	"ChaosReigns.com" "http://www.chaosreigns.com/iprep"
 
-parse_chaosreigns_iprep100() { parse_chaosreigns_once chaosreigns_iprep100; }
-parse_chaosreigns_iprep50()  { parse_chaosreigns_once chaosreigns_iprep50;  }
-parse_chaosreigns_iprep0()   { parse_chaosreigns_once chaosreigns_iprep0;   }
+delete_ipset chaosreigns_iprep50
+#update chaosreigns_iprep50 $[24*60] 0 ipv4 ip \
+#	"http://www.chaosreigns.com/iprep/iprep.txt" \
+#	parse_chaosreigns_iprep50 \
+#	"spam" \
+#	"[ChaosReigns.com](http://www.chaosreigns.com/iprep) The iprep50 list includes all IPs that sent both ham and spam emails. This is an automated, free, public email IP reputation system. The primary goal is a whitelist. Other data is provided as a consequence." \
+#	"ChaosReigns.com" "http://www.chaosreigns.com/iprep"
 
-update chaosreigns_iprep100 $[24*60] 0 ipv4 ip \
-	"http://www.chaosreigns.com/iprep/iprep.txt" \
-	parse_chaosreigns_iprep100 \
-	"spam" \
-	"[ChaosReigns.com](http://www.chaosreigns.com/iprep) The iprep100 list includes all IPs that sent 100% ham emails. This is an automated, free, public email IP reputation system. The primary goal is a whitelist. Other data is provided as a consequence." \
-	"ChaosReigns.com" "http://www.chaosreigns.com/iprep"
-
-update chaosreigns_iprep50 $[24*60] 0 ipv4 ip \
-	"http://www.chaosreigns.com/iprep/iprep.txt" \
-	parse_chaosreigns_iprep50 \
-	"spam" \
-	"[ChaosReigns.com](http://www.chaosreigns.com/iprep) The iprep50 list includes all IPs that sent both ham and spam emails. This is an automated, free, public email IP reputation system. The primary goal is a whitelist. Other data is provided as a consequence." \
-	"ChaosReigns.com" "http://www.chaosreigns.com/iprep"
-
-update chaosreigns_iprep0 $[24*60] 0 ipv4 ip \
-	"http://www.chaosreigns.com/iprep/iprep.txt" \
-	parse_chaosreigns_iprep0 \
-	"spam" \
-	"[ChaosReigns.com](http://www.chaosreigns.com/iprep) The iprep0 list includes all IPs that sent only spam emails. This is an automated, free, public email IP reputation system. The primary goal is a whitelist. Other data is provided as a consequence." \
-	"ChaosReigns.com" "http://www.chaosreigns.com/iprep"
+delete_ipset chaosreigns_iprep0
+#update chaosreigns_iprep0 $[24*60] 0 ipv4 ip \
+#	"http://www.chaosreigns.com/iprep/iprep.txt" \
+#	parse_chaosreigns_iprep0 \
+#	"spam" \
+#	"[ChaosReigns.com](http://www.chaosreigns.com/iprep) The iprep0 list includes all IPs that sent only spam emails. This is an automated, free, public email IP reputation system. The primary goal is a whitelist. Other data is provided as a consequence." \
+#	"ChaosReigns.com" "http://www.chaosreigns.com/iprep"
 
 
 # -----------------------------------------------------------------------------
@@ -6061,6 +6385,25 @@ update cta_cryptowall $[24*60] 0 ipv4 ip \
 
 
 # -----------------------------------------------------------------------------
+# https://github.com/client9/ipcat
+
+parse_client9_ipcat_datacenters() {
+	 $CUT_CMD -d ',' -f 1,2 |\
+	 	$TR_CMD "," "-" |\
+	 	$IPRANGE_CMD
+}
+
+update datacenters $[24*60] 0 ipv4 both \
+	"https://raw.githubusercontent.com/client9/ipcat/master/datacenters.csv" \
+	parse_client9_ipcat_datacenters \
+	"organizations" \
+	"[Nick Galbreath](https://github.com/client9/ipcat) This is a list of IPv4 address that correspond to datacenters, co-location centers, shared and virtual webhosting providers. In other words, ip addresses that end web consumers should not be using." \
+	"Nick Galbreath" "https://github.com/client9/ipcat" \
+	license "GPLv3" \
+	never_empty
+
+
+# -----------------------------------------------------------------------------
 # https://cleantalk.org/
 
 parse_cleantalk() { $GREP_CMD -oP ">[[:space:]]*${IP4_MATCH}[[:space:]]*<" | $GREP_CMD -oP "${IP4_MATCH}"; }
@@ -6070,21 +6413,24 @@ update cleantalk_new $[15] "$[24*60] $[7*24*60] $[30*24*60]" ipv4 ip \
 	parse_cleantalk \
 	"abuse" \
 	"[CleanTalk](https://cleantalk.org/) Recent HTTP Spammers" \
-	"CleanTalk" "https://cleantalk.org/"
+	"CleanTalk" "https://cleantalk.org/" \
+	can_be_empty
 
 update cleantalk_updated $[15] "$[24*60] $[7*24*60] $[30*24*60]" ipv4 ip \
 	"https://cleantalk.org/blacklists/updated_today" \
 	parse_cleantalk \
 	"abuse" \
 	"[CleanTalk](https://cleantalk.org/) Recurring HTTP Spammers" \
-	"CleanTalk" "https://cleantalk.org/"
+	"CleanTalk" "https://cleantalk.org/" \
+	can_be_empty
 
 update cleantalk_top20 $[24*60] 0 ipv4 ip \
 	"https://cleantalk.org/blacklists/top20" \
 	parse_cleantalk \
 	"abuse" \
 	"[CleanTalk](https://cleantalk.org/) Top 20 HTTP Spammers" \
-	"CleanTalk" "https://cleantalk.org/"
+	"CleanTalk" "https://cleantalk.org/" \
+	can_be_empty
 
 merge cleantalk ipv4 ip \
 	"abuse" \
@@ -6132,7 +6478,42 @@ delete_ipset jigsaw_malware
 #	"malware" \
 #	"[Jigsaw Security Enterprise](http://www.jigsawsecurityenterprise.com/#!open-blacklist/kafsx) Malicious IP Destinations usually C2 or botnet activity or malicious payloads. Information on this blacklist is low fidelity meaning we do not update these indicators that often and there is no validation of the data. These are raw feeds that have not been processed. In order to get the most up to date data and to remove false positives you should consider subscribing to our Jigsaw Enterprise Solution." \
 #	"Jigsaw Security Enterprise" "http://www.jigsawsecurityenterprise.com/#!open-blacklist/kafsx"
-	
+
+# -----------------------------------------------------------------------------
+# CoinBlockerLists
+# https://github.com/ZeroDot1/CoinBlockerLists
+
+update coinbl_hosts $[24*60] 0 ipv4 ip \
+	"https://zerodot1.gitlab.io/CoinBlockerLists/hosts" \
+	hphosts2ips \
+	"organizations" \
+	"[CoinBlockerLists](https://gitlab.com/ZeroDot1/CoinBlockerLists) Simple lists that can help prevent cryptomining in the browser or other applications. This list contains all domains - A list for administrators to prevent mining in networks. The maintainer's file contains hostnames, which have been DNS resolved to IP addresses." \
+	"CoinBlockerLists" "https://gitlab.com/ZeroDot1/CoinBlockerLists" \
+	dont_enable_with_all
+
+update coinbl_hosts_optional $[24*60] 0 ipv4 ip \
+	"https://zerodot1.gitlab.io/CoinBlockerLists/hosts_optional" \
+	hphosts2ips \
+	"organizations" \
+	"[CoinBlockerLists](https://gitlab.com/ZeroDot1/CoinBlockerLists) Simple lists that can help prevent cryptomining in the browser or other applications. This list contains additional domains, for administrators to prevent mining in networks. The maintainer's file contains hostnames, which have been DNS resolved to IP addresses." \
+	"CoinBlockerLists" "https://gitlab.com/ZeroDot1/CoinBlockerLists" \
+	dont_enable_with_all
+
+update coinbl_hosts_browser $[24*60] 0 ipv4 ip \
+	"https://zerodot1.gitlab.io/CoinBlockerLists/hosts_browser" \
+	hphosts2ips \
+	"organizations" \
+	"[CoinBlockerLists](https://gitlab.com/ZeroDot1/CoinBlockerLists) Simple lists that can help prevent cryptomining in the browser or other applications. A hosts list to prevent browser mining only. The maintainer's file contains hostnames, which have been DNS resolved to IP addresses." \
+	"CoinBlockerLists" "https://gitlab.com/ZeroDot1/CoinBlockerLists" \
+	dont_enable_with_all
+
+update coinbl_ips $[24*60] 0 ipv4 ip \
+	"https://zerodot1.gitlab.io/CoinBlockerLists/MiningServerIPList.txt" \
+	remove_comments \
+	"organizations" \
+	"[CoinBlockerLists](https://gitlab.com/ZeroDot1/CoinBlockerLists) Simple lists that can help prevent cryptomining in the browser or other applications. This list contains all IPs - An additional list for administrators to prevent mining in networks. The maintainer's file contains hostnames, which have been DNS resolved to IP addresses." \
+	"CoinBlockerLists" "https://gitlab.com/ZeroDot1/CoinBlockerLists" \
+
 
 # -----------------------------------------------------------------------------
 # http://hosts-file.net/
@@ -6312,7 +6693,7 @@ update iblocklist_rangetest $[12*60] 0 ipv4 both \
 update iblocklist_bogons $[12*60] 0 ipv4 both \
 	"http://list.iblocklist.com/?list=gihxqmhyunbxhbmgqrla&fileformat=p2p&archiveformat=gz" \
 	p2p_gz \
-	"unrouteable" \
+	"unroutable" \
 	"Unallocated address space." \
 	"iBlocklist.com" "https://www.iblocklist.com/" \
 	dont_redistribute
@@ -6352,7 +6733,7 @@ update iblocklist_dshield $[12*60] 0 ipv4 both \
 update iblocklist_iana_reserved $[12*60] 0 ipv4 both \
 	"http://list.iblocklist.com/?list=bcoepfyewziejvcqyhqo&fileformat=p2p&archiveformat=gz" \
 	p2p_gz \
-	"unrouteable" \
+	"unroutable" \
 	"IANA Reserved IPs." \
 	"iBlocklist.com" "https://www.iblocklist.com/" \
 	dont_redistribute
@@ -6360,7 +6741,7 @@ update iblocklist_iana_reserved $[12*60] 0 ipv4 both \
 update iblocklist_iana_private $[12*60] 0 ipv4 both \
 	"http://list.iblocklist.com/?list=cslpybexmxyuacbyuvib&fileformat=p2p&archiveformat=gz" \
 	p2p_gz \
-	"unrouteable" \
+	"unroutable" \
 	"IANA Private IPs." \
 	"iBlocklist.com" "https://www.iblocklist.com/" \
 	dont_redistribute
@@ -6368,7 +6749,7 @@ update iblocklist_iana_private $[12*60] 0 ipv4 both \
 update iblocklist_iana_multicast $[12*60] 0 ipv4 both \
 	"http://list.iblocklist.com/?list=pwqnlynprfgtjbgqoizj&fileformat=p2p&archiveformat=gz" \
 	p2p_gz \
-	"unrouteable" \
+	"unroutable" \
 	"IANA Multicast IPs." \
 	"iBlocklist.com" "https://www.iblocklist.com/" \
 	dont_redistribute
@@ -6463,7 +6844,7 @@ update iblocklist_malc0de $[12*60] 0 ipv4 both \
 update iblocklist_cidr_report_bogons $[12*60] 0 ipv4 both \
 	"http://list.iblocklist.com/?list=lujdnbasfaaixitgmxpp&fileformat=p2p&archiveformat=gz" \
 	p2p_gz \
-	"unrouteable" \
+	"unroutable" \
 	"cidr-report.org IP list of Unallocated address space." \
 	"iBlocklist.com" "https://www.iblocklist.com/"
 
@@ -6767,7 +7148,7 @@ update uscert_hidden_cobra $[24*60] 0 ipv4 ip \
 # BadIPs.com
 
 badipscom() {
-	local ret=
+	local ret= x= i=
 
 	ipset_shall_be_run "badips"
 	case "$?" in
@@ -6780,15 +7161,6 @@ badipscom() {
 		*)	return 1
 			;;
 	esac
-
-	if [ ${ENABLE_ALL} -eq 1 ]
-		then
-		local x=
-		for x in badips bi_bruteforce_2_30d bi_ftp_2_30d bi_http_2_30d bi_mail_2_30d bi_proxy_2_30d bi_sql_2_30d bi_ssh_2_30d bi_voip_2_30d
-		do
-			ipset_shall_be_run "${x}"
-		done
-	fi
 
 	download_manager "badips" $[24*60] "https://www.badips.com/get/categories"
 	ret=$?
@@ -6803,55 +7175,73 @@ badipscom() {
 			$SORT_CMD -u
 		)"
 
-	local category= file= score= age= i= ipset= url= info= count=0
+
+	if [ ${ENABLE_ALL} -eq 1 ]
+		then
+		declare -A badips_excluded='([bi_dovecot-pop3_0_1d]="1" [bi_sql-injection_0_1d]="1" [bi_dovecot-pop3imap_1_7d]="1" [bi_courierpop3_2_30d]="1" [bi_bruteforce_2_30d]="1" [bi_Php-url-fopen_0_1d]="1" [bi_nginxpost_0_1d]="1" [bi_vnc_0_1d]="1" [bi_smtp_1_7d]="1" [bi_apache-w00tw00t_0_1d]="1" [bi_apache-dokuwiki_1_7d]="1" [bi_nginxpost_2_30d]="1" [bi_courierauth_1_7d]="1" [bi_w00t_0_1d]="1" [bi_ssh-auth_2_30d]="1" [bi_sql-injection_2_30d]="1" [bi_xmlrpc_1_7d]="1" [bi_pureftp_1_7d]="1" [bi_local-exim_2_30d]="1" [bi_php-cgi_0_1d]="1" [bi_cyrusauth_0_1d]="1" [bi_asterisk-sec_0_1d]="1" [bi_wp_2_30d]="1" [bi_apache-spamtrap_2_30d]="1" [bi_username-notfound_2_30d]="1" [bi_imap_1_7d]="1" [bi_assp_1_7d]="1" [bi_apacheddos_2_30d]="1" [bi_apache-wordpress_2_30d]="1" [bi_apache-overflows_2_30d]="1" [bi_nginx_1_7d]="1" [bi_dovecot-pop3_2_30d]="1" [bi_apache-php-url-fopen_1_7d]="1" [bi_apache-defensible_1_7d]="1" [bi_vsftpd_1_7d]="1" [bi_apache-wordpress_0_1d]="1" [bi_apache-overflows_0_1d]="1" [bi_ssh-auth_0_1d]="1" [bi_w00t_1_7d]="1" [bi_proxy_2_30d]="1" [bi_username-notfound_1_7d]="1" [bi_apacheddos_1_7d]="1" [bi_apache-wordpress_1_7d]="1" [bi_apache-overflows_1_7d]="1" [bi_rdp_2_30d]="1" [bi_nginx_0_1d]="1" [bi_apache-php-url-fopen_0_1d]="1" [bi_apache-defensible_0_1d]="1" [bi_Php-url-fopen_2_30d]="1" [bi_phpids_0_1d]="1" [bi_courierpop3_1_7d]="1" [bi_apache-phpmyadmin_2_30d]="1" [bi_sql_1_7d]="1" [bi_screensharingd_1_7d]="1" [bi_pop3_1_7d]="1" [bi_plesk-postfix_2_30d]="1" [bi_ssh-blocklist_2_30d]="1" [bi_phpids_2_30d]="1" [bi_nginxproxy_0_1d]="1" [bi_apache-nohome_1_7d]="1" [bi_spamdyke_1_7d]="1" [bi_sql-attack_1_7d]="1" [bi_qmail-smtp_1_7d]="1" [bi_nginx_2_30d]="1" [bi_apache-php-url-fopen_2_30d]="1" [bi_apache-defensible_2_30d]="1" [bi_vnc_2_30d]="1" [bi_apache-w00tw00t_2_30d]="1" [bi_spamdyke_2_30d]="1" [bi_proxy_0_1d]="1" [bi_local-exim_1_7d]="1" [bi_exim_2_30d]="1" [bi_apache-404_1_7d]="1" [bi_rdp_1_7d]="1" [bi_spamdyke_0_1d]="1" [bi_smtp_2_30d]="1" [bi_apache-dokuwiki_2_30d]="1" [bi_named_2_30d]="1" [bi_apache-scriddies_2_30d]="1" [bi_named_1_7d]="1" [bi_apache-scriddies_1_7d]="1" [bi_nginxpost_1_7d]="1" [bi_dns_2_30d]="1" [bi_nginxproxy_2_30d]="1" [bi_apache-modsec_2_30d]="1" [bi_Php-url-fopen_1_7d]="1" [bi_php-cgi_1_7d]="1" [bi_cyrusauth_1_7d]="1" [bi_asterisk-sec_1_7d]="1" [bi_xmlrpc_0_1d]="1" [bi_pureftp_0_1d]="1" [bi_sql-attack_2_30d]="1" [bi_qmail-smtp_2_30d]="1" [bi_squid_0_1d]="1" [bi_ddos_0_1d]="1" [bi_spam_2_30d]="1" [bi_owncloud_2_30d]="1" [bi_apache-phpmyadmin_1_7d]="1" [bi_vnc_1_7d]="1" [bi_apache-w00tw00t_1_7d]="1" [bi_apache-dokuwiki_0_1d]="1" [bi_wp_0_1d]="1" [bi_imap_2_30d]="1" [bi_assp_2_30d]="1" [bi_apache-spamtrap_0_1d]="1" [bi_wp_1_7d]="1" [bi_sshddos_2_30d]="1" [bi_apache-spamtrap_1_7d]="1" [bi_sshddos_0_1d]="1" [bi_rfi-attack_2_30d]="1" [bi_drupal_2_30d]="1" [bi_w00t_2_30d]="1" [bi_sql_2_30d]="1" [bi_screensharingd_2_30d]="1" [bi_pop3_2_30d]="1" [bi_sshddos_1_7d]="1" [bi_squid_2_30d]="1" [bi_ddos_2_30d]="1" [bi_apache-noscript_1_7d]="1" [bi_ssh-blocklist_1_7d]="1" [bi_phpids_1_7d]="1" [bi_courierpop3_0_1d]="1" [bi_xmlrpc_2_30d]="1" [bi_pureftp_2_30d]="1" [bi_dns_1_7d]="1" [bi_proxy_1_7d]="1" [bi_local-exim_0_1d]="1" [bi_apache-nohome_2_30d]="1" [bi_plesk-postfix_1_7d]="1" [bi_ssh-auth_1_7d]="1" [bi_nginxproxy_1_7d]="1" [bi_badbots_2_30d]="1" [bi_apache-nohome_0_1d]="1" [bi_apache-modsec_1_7d]="1" [bi_screensharingd_0_1d]="1" [bi_pop3_0_1d]="1" [bi_owncloud_1_7d]="1" [bi_rfi-attack_1_7d]="1" [bi_drupal_1_7d]="1" [bi_apache-404_2_30d]="1" [bi_rfi-attack_0_1d]="1" [bi_sql-injection_1_7d]="1" [bi_asterisk_1_7d]="1" [bi_dovecot-pop3_1_7d]="1" [bi_squid_1_7d]="1" [bi_ddos_1_7d]="1" [bi_ssh-ddos_1_7d]="1" [bi_php-cgi_2_30d]="1" [bi_cyrusauth_2_30d]="1" [bi_asterisk-sec_2_30d]="1" )'
+		for x in ${categories}
+		do
+			for i in 0_1d 1_7d 2_30d
+			do
+				if [ -z "${badips_excluded[bi_${x}_${i}]}" ]
+					then
+					ipset_shall_be_run "bi_${x}_${i}"
+				fi
+			done
+		done
+	fi
+
+	local category= file= score= age= ipset= url= info= count=0
 	for category in ${categories}
 	do
+		#echo >&2 "CATEGORY: '${category}'"
 		count=0
 		# info "bi_${category}"
 
-		for file in $(cd "${BASE_DIR}"; $LS_CMD 2>/dev/null bi_${category}*.source)
+		for file in $(cd "${BASE_DIR}"; $LS_CMD 2>/dev/null bi_${category}_*.source)
 		do
+			#echo >&2 "FILE: '${file}'"
 			count=$[count + 1]
-			if [[ "${file}" =~ ^bi_${category}_[0-9\.]+_[0-9]+[dwmy].source$ ]]
+			if [[ "${file}" =~ ^bi_.*_[0-9\.]+_[0-9]+[dwmy].source$ ]]
 				then
 				# score and age present
-				i="$(echo "${file}" | $SED_CMD "s|^bi_${category}_\([0-9\.]\+\)_\([0-9]\+[dwmy]\)\.source|\1;\2|g")"
+				i="$(echo "${file}" | $SED_CMD "s|^bi_.*_\([0-9\.]\+\)_\([0-9]\+[dwmy]\)\.source|\1;\2|g")"
 				score=${i/;*/}
 				age="${i/*;/}"
 				ipset="bi_${category}_${score}_${age}"
 				url="https://www.badips.com/get/list/${category}/${score}?age=${age}"
 				info="[BadIPs.com](https://www.badips.com/) Bad IPs in category ${category} with score above ${score} and age less than ${age}"
-				if [ ! -f "${BASE_DIR}/${ipset}.source" ]
+				if [ "${file}" != "${ipset}.source" ]
 					then
-					ipset_warning "${file}" "parsed as '${ipset}' seems invalid"
+					ipset_warning "${file}" "parsed as '${ipset}' with category '${category}', score '${score}', age '${age}' seems invalid"
 					continue
 				fi
 
-			elif [[ "${file}" =~ ^bi_${category}_[0-9]+[dwmy].source$ ]]
+			elif [[ "${file}" =~ ^bi_.*_[0-9]+[dwmy].source$ ]]
 				then
 				# age present
-				age="$(echo "${file}" | $SED_CMD "s|^bi_${category}_\([0-9]\+[dwmy]\)\.source|\1|g")"
+				age="$(echo "${file}" | $SED_CMD "s|^bi_.*_\([0-9]\+[dwmy]\)\.source|\1|g")"
 				score=0
 				ipset="bi_${category}_${age}"
 				url="https://www.badips.com/get/list/${category}/${score}?age=${age}"
 				info="[BadIPs.com](https://www.badips.com/) Bad IPs in category ${category} with age less than ${age}"
-				if [ ! -f "${BASE_DIR}/${ipset}.source" ]
+				if [ "${file}" != "${ipset}.source" ]
 					then
-					ipset_warning "${file}" "parsed as '${ipset}' seems invalid"
+					ipset_warning "${file}" "parsed as '${ipset}' with category '${category}', score '${score}', age '${age}' seems invalid"
 					continue
 				fi
 
-			elif [[ "${file}" =~ ^bi_${category}_[0-9\.]+.source$ ]]
+			elif [[ "${file}" =~ ^bi_.*_[0-9\.]+.source$ ]]
 				then
 				# score present
-				score="$(echo "${file}" | $SED_CMD "s|^bi_${category}_\([0-9\.]\+\)\.source|\1|g")"
+				score="$(echo "${file}" | $SED_CMD "s|^bi_.*_\([0-9\.]\+\)\.source|\1|g")"
 				age=
 				ipset="bi_${category}_${score}"
 				url="https://www.badips.com/get/list/${category}/${score}"
 				info="[BadIPs.com](https://www.badips.com/) Bad IPs in category ${category} with score above ${score}"
-				if [ ! -f "${BASE_DIR}/${ipset}.source" ]
+				if [ "${file}" != "${ipset}.source" ]
 					then
-					ipset_warning "${file}" "parsed as '${ipset}' seems invalid"
+					ipset_warning "${file}" "parsed as '${ipset}' with category '${category}', score '${score}', age '${age}' seems invalid"
 					continue
 				fi
 			else
@@ -6899,6 +7289,97 @@ badipscom() {
 }
 
 badipscom
+
+# -----------------------------------------------------------------------------
+# normshield
+
+normshield() {
+	local ret= url= x= severity=
+
+	ipset_shall_be_run "normshield"
+	case "$?" in
+		0)	;;
+
+		1)	[ -d "${BASE_DIR}/.git" ] && echo >"${BASE_DIR}/normshield.setinfo" "normshield.com|[NormShield](https://services.normshield.com/threatfeed) has a number of servers spread around the world to collect threat data with honeypot system. They are collecting, consolidating and grouping hundreds of suspicious ip addresses every day.|ipv4 hash:ip|disabled|disabled"
+			return 1
+			;;
+
+		*)	return 1
+			;;
+	esac
+
+	url="https://services.normshield.com/api/v1/threatfeed/downloadintel?date=$(${DATE_CMD} --date=@$(( $(${DATE_CMD} +%s) - 86400 )) +%m%d%Y)&format=csv&category=honeypotfeeds"
+	download_manager "normshield" $[24*60] "${url}"
+	ret=$?
+	[ ! -s "${BASE_DIR}/normshield.source" ] && return 0
+
+	local categories="$( \
+		$CAT_CMD ${BASE_DIR}/normshield.source |\
+			$TR_CMD -d '\r' |\
+			$CUT_CMD -d ',' -f 9 |\
+			$GREP_CMD -v "^category$" |\
+			$SORT_CMD -u
+		)"
+
+	if [ ${ENABLE_ALL} -eq 1 ]
+		then
+		for x in ${categories}
+		do
+			for severity in all high
+			do
+				ipset_shall_be_run "normshield_${severity}_${x}"
+			done
+		done
+	fi
+
+	local category= ipset= info=
+	for x in ${categories}
+	do
+		for severity in all high
+		do
+			ipset="normshield_${severity}_${x}"
+			info="[NormShield.com](https://services.normshield.com/threatfeed) IPs in category ${x} with severity ${severity}"
+			if [ ! -f "${BASE_DIR}/${ipset}.source" ]
+				then
+				ipset_disabled "${ipset}"
+				continue
+			fi
+
+			if [ "${severity}" = "high" ]
+				then
+				${CAT_CMD} "${BASE_DIR}/normshield.source" |\
+					${TR_CMD} -d '\r' |\
+					${CUT_CMD} -d ',' -f 2,5,9 |\
+					${GREP_CMD} ",${severity},${x}$" |\
+					${CUT_CMD} -d ',' -f 1 >"${BASE_DIR}/${ipset}.source"
+			else
+				${CAT_CMD} "${BASE_DIR}/normshield.source" |\
+					${TR_CMD} -d '\r' |\
+					${CUT_CMD} -d ',' -f 2,9 |\
+					${GREP_CMD} ",${x}$" |\
+					${CUT_CMD} -d ',' -f 1 >"${BASE_DIR}/${ipset}.source"
+			fi
+
+			case "${x}" in
+				suspicious) category="abuse" ;;
+				wannacry|wormscan) category="malware" ;;
+				spam) category="spam" ;;
+				*) category="attacks" ;;
+			esac
+
+			update "${ipset}" "$[12*60]" 0 ipv4 ip \
+				"" \
+				${CAT_CMD} \
+				"${category}" \
+				"${info}" \
+				"NormShield.com" "https://services.normshield.com/threatfeed" \
+				can_be_empty
+		done
+	done
+}
+
+normshield
+
 
 # -----------------------------------------------------------------------------
 # blueliv
@@ -7294,9 +7775,6 @@ merge firehol_level3 ipv4 both \
 	"FireHOL" "http://iplists.firehol.org/" \
 	bruteforceblocker \
 	ciarmy \
-	dragon_http \
-	dragon_sshpauth \
-	dragon_vncprobe \
 	dshield_30d \
 	dshield_top_1000 \
 	malc0de \
@@ -7356,12 +7834,6 @@ merge firehol_webserver ipv4 both \
 	"attacks" \
 	"A web server IP blacklist made from blocklists that track IPs that should never be used by your web users. (This list includes IPs that are servers hosting malware, bots, etc or users having a long criminal history. This list is to be used on top of firehol_level1, firehol_level2, firehol_level3 and possibly firehol_proxies or firehol_anonymous)." \
 	"FireHOL" "http://iplists.firehol.org/" \
-	hphosts_emd \
-	hphosts_exp \
-	hphosts_fsa \
-	hphosts_hjk \
-	hphosts_psh \
-	hphosts_wrz \
 	maxmind_proxy_fraud \
 	myip \
 	pushing_inertia_blocklist \
@@ -7373,9 +7845,9 @@ merge firehol_proxies ipv4 both \
 	"FireHOL" "http://iplists.firehol.org/" \
 	iblocklist_proxies \
 	maxmind_proxy_fraud \
+	ip2proxy_px1lite \
 	proxylists_30d \
 	proxyrss_30d proxz_30d \
-	proxyspy_30d \
 	ri_connect_proxies_30d \
 	ri_web_proxies_30d \
 	socks_proxy_30d \
@@ -7399,8 +7871,6 @@ merge firehol_webclient ipv4 both \
 	ransomware_online \
 	sslbl_aggressive \
 	cybercrime \
-	atlas_phishing_2d \
-	atlas_fastflux_2d \
 	dyndns_ponmocup \
 	maxmind_proxy_fraud \
 

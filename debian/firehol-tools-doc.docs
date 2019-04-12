@@ -1,7 +1,3 @@
-#AUTHORS
-THANKS
-#NEWS
-README
 debian/tmp/usr/share/doc/firehol/vnetbuild-manual.pdf
 debian/tmp/usr/share/doc/firehol/html/vnetbuild-manual.html
 debian/tmp/usr/share/doc/firehol/html/firehol-manual.css

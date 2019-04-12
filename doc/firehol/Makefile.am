@@ -159,6 +159,8 @@ man_MANS = \
 	$(MANUALMAN_GENERATED) \
 	$(MANUALMAN_GENERATED_INDIRECT)
 
+$(MANUALMAN_GENERATED_INDIRECT): $(MANUALMAN_GENERATED)
+
 endif
 
 endif
@@ -173,7 +175,10 @@ FORMATTABLE = ${top_srcdir}/doc/tools/format-table
 PANDOCPOST = $(gensrcdir)/doc/tools/pandoc-post
 CHECKLINKS = ${top_srcdir}/doc/tools/check-links
 
-firehol-services.5.md: $(top_srcdir)/sbin/firehol ../services-db.data ../service-links
+firehol-services.5.md: ../services-db.data ../service-links \
+		$(top_srcdir)/sbin/firehol \
+		$(top_srcdir)/sbin/services.common \
+		$(top_srcdir)/sbin/services.firehol
 	$(MKSERVICEMAN) firehol-services.5.md $+
 
 contents.md: *.1.md *.5.md contents.tpl

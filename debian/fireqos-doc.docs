@@ -1,7 +1,3 @@
-#AUTHORS
-THANKS
-#NEWS
-README
 debian/tmp/usr/share/doc/firehol/fireqos-manual.pdf
 debian/tmp/usr/share/doc/firehol/html/fireqos-manual.html
 debian/tmp/usr/share/doc/firehol/html/firehol-manual.css

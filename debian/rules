@@ -1,21 +1,17 @@
 #!/usr/bin/make -f
+include /usr/share/dpkg/pkg-info.mk
 
 default:
 	@uscan --no-conf --dehs --report || true
 
 %:
-	dh $@ --with autoreconf --no-parallel
+	dh $@ --no-parallel
 
 override_dh_auto_configure:
 	dh_auto_configure -- --enable-maintainer-mode
-
-override_dh_auto_test:
 
 override_dh_installinit:
 	dh_installinit --restart-after-upgrade
 
 override_dh_compress:
 	dh_compress -X.pdf -Xexamples
-
-get-orig-source:
-	uscan --no-conf --download-current-version --compression xz --verbose

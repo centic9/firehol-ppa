@@ -1,0 +1,23 @@
+Description: debianization: usrmerge transition
+ Meant to smmooth the usrmerge transition in Debian
+ (see <https://wiki.debian.org/UsrMerge> for details).
+ This patch must be removed once the transition is finished.
+Origin: vendor, Debian
+Forwarded: not-needed
+Author: Jerome Benoit <calculus@rezozer.net>
+Last-Update: 2018-11-17
+
+--- a/build/subst.inc
++++ b/build/subst.inc
+@@ -3,6 +3,11 @@
+ 		-e 's#[@]datarootdir_POST[@]#$(datarootdir)#g' \
+ 		-e 's#[@]localstatedir_POST[@]#$(localstatedir)#g' \
+ 		-e 's#[@]sysconfdir_POST[@]#$(sysconfdir)#g' \
++		-e 's#_CMD="[/]usr[/]sbin[/]#_CMD="#g' \
++		-e 's#_CMD="[/]usr[/]bin[/]#_CMD="#g' \
++		-e 's#_CMD="[/]sbin[/]#_CMD="#g' \
++		-e 's#_CMD="[/]bin[/]#_CMD="#g' \
++		-e 's#_CMD="\([a-z][0-9a-z-]*\)#_CMD="`which \1`#g' \
+ 		$< > $@.tmp; then \
+ 		mv "$@.tmp" "$@"; \
+ 	else \

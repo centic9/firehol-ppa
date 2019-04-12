@@ -5,8 +5,4 @@ Abstract: This reference manual documents how to use the FireQOS traffic shaper
 Section: Network/Monitoring
 
 Format: PDF
-Files: /usr/share/doc/fireqos-doc/fireqos-manual.pdf
-
-Format: HTML
-Index: /usr/share/doc/fireqos-doc/fireqos-manual.html
-Files: /usr/share/doc/fireqos-doc/firehol-manual.css
+Files: /usr/share/doc/fireqos/fireqos-manual.pdf
