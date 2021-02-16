@@ -19,10 +19,10 @@ distinguishable prefix; let say, for illustration, to "FireHOL: ".
 
 Then create /etc/rsyslog.d/firehol.conf with the following contents:
 
---8><---------------------------------------------------------------
+==8><---------------------------------------------------------------
 :msg, contains, "FireHOL: " -/var/log/firehol/firehol.log
 & stop
----------------------------------------------------------------><8--
+---------------------------------------------------------------><8==
 
 what will make rsyslog to redirect FireHOL messages to the log file
 `/var/log/firehol/firehol.log' within the directory `/var/log/firehol'
@@ -30,7 +30,7 @@ what will make rsyslog to redirect FireHOL messages to the log file
 
 A concomitant log rotation file may write:
 
---8><---------------------------------------------------------------
+==8><---------------------------------------------------------------
 /var/log/firehol/firehol.log
 {
 	rotate 7
@@ -43,7 +43,7 @@ A concomitant log rotation file may write:
 		invoke-rc.d rsyslog rotate > /dev/null
 	endscript
 }
----------------------------------------------------------------><8--
+---------------------------------------------------------------><8==
 
 For more detailed information and discussion, visit the original blog page [1].
 
@@ -52,4 +52,20 @@ as distributed by the firehol-doc Debian package.
 
 [1] http://blog.shadypixel.com/log-iptables-messages-to-a-separate-file-with-rsyslog/
 
- -- Jerome Benoit <calculus@rezozer.net>  Wed, 06 Aug 2014 14:14:44 +0000
+
+FireHOL, iptables-legacy(8), iptables-nft(8), and iptables
+==========================================================
+
+At the time of writing, FireHOL has no support for iptables-nft(8). That is,
+FireHOL still uses iptables-legacy(8). This is not only very unfortunate but
+also the source of numerous issues and confusions.
+
+The transition from iptables[-legacy](8) to iptables-nft(8) occurs at Buster
+(Debian 10), and in Buster iptables is managed as an alternative through
+update-alternatives(981): the default is iptables-nft(8). However, FireHOL
+explicitly uses iptables-legacy(8): the upgrading to Buster might involve
+some manual interventions and material related to FireHOL might be forced
+to use iptables-legacy(8) instead of iptables-nft(8).
+
+
+ -- Jerome Benoit <calculus@rezozer.net>  Fri, 08 May 2020 15:26:18 +0000

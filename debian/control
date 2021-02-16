@@ -1,18 +1,25 @@
 Source: firehol
 Section: net
 Priority: optional
-Maintainer: Jerome Benoit <calculus@rezozer.net>
+Maintainer: Ubuntu Developers <ubuntu-devel-discuss@lists.ubuntu.com>
+XSBC-Original-Maintainer: Jerome Benoit <calculus@rezozer.net>
+Rules-Requires-Root: no
+Build-Depends:
+ debhelper-compat (= 12),
 Build-Depends-Indep:
- debhelper (>= 11),
  libxml2-utils,
- texlive-base, texlive-latex-recommended, texlive-fonts-recommended, lmodern,
+ texlive-base,
+ texlive-latex-extra, texlive-latex-recommended,
+ texlive-fonts-recommended, lmodern,
  pandoc,
- kmod, iptables, iproute2, ipset, iprange, nfacct, tcpdump,
+ kmod,
+ iptables (>= 1.8.2),
+ iproute2, ipset, iprange, nfacct, tcpdump,
  inetutils-ping | iputils-ping , traceroute,
  procps,
  curl, wget, whois, jq, unzip, git, graphviz,
  screen
-Standards-Version: 4.2.1
+Standards-Version: 4.5.0
 Homepage: https://firehol.org
 Vcs-Git: https://salsa.debian.org/debian/firehol.git
 Vcs-Browser: https://salsa.debian.org/debian/firehol
@@ -21,6 +28,7 @@ Package: firehol
 Architecture: all
 Replaces: firehol-doc (<< 3.1.5+ds1-1)
 Breaks: firehol-doc (<< 3.1.5+ds1-1)
+Pre-Depends: ${misc:Pre-Depends}
 Depends: firehol-common (= ${binary:Version}), lsb-base, ${misc:Depends}
 Recommends: fireqos (= ${binary:Version})
 Suggests: firehol-tools (= ${binary:Version}), firehol-doc (= ${binary:Version}), ulogd2
@@ -56,6 +64,7 @@ Package: fireqos
 Architecture: all
 Replaces: fireqos-doc (<< 3.1.5+ds1-1)
 Breaks: fireqos-doc (<< 3.1.5+ds1-1)
+Pre-Depends: ${misc:Pre-Depends}
 Depends: firehol-common (= ${binary:Version}), lsb-base, ${misc:Depends}
 Recommends: firehol (= ${binary:Version})
 Suggests: firehol-tools (= ${binary:Version}), fireqos-doc (= ${binary:Version})
@@ -93,10 +102,11 @@ Replaces: firehol-tools-doc (<< 3.1.5+ds1-1)
 Breaks: firehol-tools-doc (<< 3.1.5+ds1-1)
 Depends:
  firehol-common (= ${binary:Version}),
- curl, wget, whois, jq, unzip, git, graphviz, screen,
+ curl, wget, whois, jq, screen,
  ${misc:Depends}
-Recommends: firehol (= ${binary:Version})
-Enhances: fireqos (= ${binary:Version})
+Recommends: git, unzip
+Suggests: graphviz
+Enhances: firehol (= ${binary:Version}), fireqos (= ${binary:Version})
 Description: easy to use but powerful traffic suite (extra tools)
  FireHOL suite is a powerful traffic suite of tools that generate generic
  firewalls, traffic shappers, and  more with an extremely simple but powerful
@@ -124,7 +134,9 @@ Description: easy to use but powerful traffic suite (extra tools docs)
 Package: firehol-common
 Architecture: all
 Depends:
- lsb-base, kmod, iptables, iproute2, ipset, iprange, nfacct, tcpdump,
+ lsb-base, kmod,
+ iptables (>= 1.8.2),
+ iproute2, ipset, iprange, nfacct, tcpdump,
  inetutils-ping | iputils-ping , traceroute, procps,
  ${misc:Depends}
 Recommends: less, firehol (= ${binary:Version}), fireqos (= ${binary:Version})

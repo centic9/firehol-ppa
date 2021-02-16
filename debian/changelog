@@ -1,3 +1,43 @@
+firehol (3.1.6+ds-10ubuntu1) hirsute; urgency=medium
+
+  * Merge with Debian; remaining changes:
+    - Dont run autotests for now on amd64 until maintainer mode conflicts
+      are bygone with. (Still sort of unstable on pbuilder as yet on amd64)
+
+ -- Matthias Klose <doko@ubuntu.com>  Tue, 16 Feb 2021 08:56:35 +0100
+
+firehol (3.1.6+ds-10) unstable; urgency=medium
+
+  * Debianization: WIP
+    - debian/control:
+      - Depends/Recommends/Suggests fields:
+        - firehol, append version for iptables (Closes: #958671);
+        - firehol-tools, improve;
+    - debian/*.REAME.Debian:
+      - d/firehol.README.Debian, update (Closes: #935640);
+    - debian/patches:
+      - d/p/debianization-source-etc_default.patch , introduce
+        (Closes: #944022);
+    - debian/upstream/metadat, introduce;
+    - debian/changelog, correct.
+
+ -- Jerome Benoit <calculus@rezozer.net>  Fri, 08 May 2020 16:16:21 +0000
+
+firehol (3.1.6+ds-9) unstable; urgency=medium
+
+  * FTBFS fix release (Closes: #949142), fix dependencing over LaTeX stuff.
+  * Debianization:
+    - debian/copyright:
+      - copyright year tuples, refresh;
+    - debian/control:
+      - debhelper, migrate to debhelper-compat (=12);
+      - Standards-Version, bump to 4.5.0 (no change);
+      - Rules-Requires-Root, set to no;
+      - fire{hol,qos} Pre-Depends field, introduce;
+    - debian/firehol-doc.lintian-overrides, refresh.
+
+ -- Jerome Benoit <calculus@rezozer.net>  Sat, 15 Feb 2020 05:51:38 +0000
+
 firehol (3.1.6+ds-8) unstable; urgency=medium
 
   * RC bug fix release (Closes: 926784), use iptable -legacy tools since
@@ -88,6 +128,14 @@ firehol (3.1.5+ds1-2) unstable; urgency=medium
 
  -- Jerome Benoit <calculus@rezozer.net>  Fri, 22 Jun 2018 20:42:05 +0000
 
+firehol (3.1.5+ds-1ubuntu1) bionic; urgency=medium
+
+  * Merge from Debian unstable.  Remaining changes:
+    - Dont run autotests for now on amd64 until maintainer mode conflicts
+      are bygone with. (Still sort of unstable on pbuilder as yet on amd64)
+
+ -- Bhavani Shankar <bhavi@ubuntu.com>  Sat, 04 Nov 2017 22:27:20 +0530
+
 firehol (3.1.5+ds1-1) unstable; urgency=medium
 
   * RC bug fix release (Closes: #901102), redundant documents in <PKG>.docs
@@ -147,6 +195,13 @@ firehol (3.1.4+ds-1) unstable; urgency=medium
       - dh options, add --no-parallel .
 
  -- Jerome Benoit <calculus@rezozer.net>  Fri, 01 Sep 2017 07:18:28 +0000
+
+firehol (3.1.1+ds-1ubuntu1) zesty; urgency=medium
+
+  * Dont run autotests for now on amd64 until maintainer mode conflicts
+    are bygone with.
+
+ -- Bhavani Shankar <bhavi@ubuntu.com>  Tue, 04 Apr 2017 12:31:42 +0530
 
 firehol (3.1.1+ds-1) unstable; urgency=medium
 
@@ -564,7 +619,8 @@ firehol (1.191-1) unstable; urgency=low
     Thanks Michael Ablassmeier for the patch.
   * Mentioned firehol-wizard in the new README.Debian
   * Moved firehol and firehol-wizard manpages into the correct section
-  * Removed gawk dependency and set GAWK_CMD to awk in firehol-lib (Closes: #250401)
+  * Removed gawk dependency and set GAWK_CMD to awk in firehol-lib
+    (Closes: #250401)
 
  -- Alexander Wirt <formorer@debian.org>  Sat, 22 May 2004 18:39:45 +0200
 
@@ -643,7 +699,7 @@ firehol (1.128-3) unstable; urgency=low
   * Now uses /etc/default/firehol to determine whether it is configured
     or not.
 
- -- Marc Brockschmidt <marc@dch-faq.de>  Sun, 05 May 2003 19:53:20 +0200
+ -- Marc Brockschmidt <marc@dch-faq.de>  Mon, 05 May 2003 19:53:20 +0200
 
 firehol (1.128-2) unstable; urgency=low
 
