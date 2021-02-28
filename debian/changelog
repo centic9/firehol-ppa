@@ -1,14 +1,24 @@
-firehol (3.1.6+ds-10ubuntu1) hirsute; urgency=medium
+firehol (3.1.7+ds-2) unstable; urgency=medium
 
-  * Merge with Debian; remaining changes:
-    - Dont run autotests for now on amd64 until maintainer mode conflicts
-      are bygone with. (Still sort of unstable on pbuilder as yet on amd64)
+  * FTBFS fix release, set conditional dh_auto_test (Closes: #982719).
 
- -- Matthias Klose <doko@ubuntu.com>  Tue, 16 Feb 2021 08:56:35 +0100
+ -- Jerome Benoit <calculus@rezozer.net>  Sun, 28 Feb 2021 09:14:26 +0000
+
+firehol (3.1.7+ds-1) unstable; urgency=medium
+
+  * New upstream patch version.
+  * Debianization:
+    - debian/copyright:
+      - copyright year tuples, refresh;
+    - debian/control:
+      - Standards-Version, bump to 4.5.1 (no change);
+    - debian/firehol-{doc,tools}.lintian-overrides, refresh tags.
+
+ -- Jerome Benoit <calculus@rezozer.net>  Sun, 21 Feb 2021 12:35:04 +0000
 
 firehol (3.1.6+ds-10) unstable; urgency=medium
 
-  * Debianization: WIP
+  * Debianization:
     - debian/control:
       - Depends/Recommends/Suggests fields:
         - firehol, append version for iptables (Closes: #958671);
@@ -128,14 +138,6 @@ firehol (3.1.5+ds1-2) unstable; urgency=medium
 
  -- Jerome Benoit <calculus@rezozer.net>  Fri, 22 Jun 2018 20:42:05 +0000
 
-firehol (3.1.5+ds-1ubuntu1) bionic; urgency=medium
-
-  * Merge from Debian unstable.  Remaining changes:
-    - Dont run autotests for now on amd64 until maintainer mode conflicts
-      are bygone with. (Still sort of unstable on pbuilder as yet on amd64)
-
- -- Bhavani Shankar <bhavi@ubuntu.com>  Sat, 04 Nov 2017 22:27:20 +0530
-
 firehol (3.1.5+ds1-1) unstable; urgency=medium
 
   * RC bug fix release (Closes: #901102), redundant documents in <PKG>.docs
@@ -195,13 +197,6 @@ firehol (3.1.4+ds-1) unstable; urgency=medium
       - dh options, add --no-parallel .
 
  -- Jerome Benoit <calculus@rezozer.net>  Fri, 01 Sep 2017 07:18:28 +0000
-
-firehol (3.1.1+ds-1ubuntu1) zesty; urgency=medium
-
-  * Dont run autotests for now on amd64 until maintainer mode conflicts
-    are bygone with.
-
- -- Bhavani Shankar <bhavi@ubuntu.com>  Tue, 04 Apr 2017 12:31:42 +0530
 
 firehol (3.1.1+ds-1) unstable; urgency=medium
 

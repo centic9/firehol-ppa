@@ -1,5 +1,5 @@
 # Request to the upstream team was sent -- Jerome Benoit <calculus@rrezozer.net>
-binary-without-manpage usr/sbin/link-balancer
+no-manual-page usr/sbin/link-balancer
 
 # Request to the upstream team was sent -- Jerome Benoit <calculus@rrezozer.net>
-binary-without-manpage usr/sbin/update-ipsets
+no-manual-page usr/sbin/update-ipsets

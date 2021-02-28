@@ -10,7 +10,15 @@ default:
 override_dh_auto_configure:
 	dh_auto_configure -- --enable-maintainer-mode
 
+## The test suite relies on `unshare -r` which does not work under chroot
+## when /proc/sys/kernel/unprivileged_userns_clone is not set to 0. The issue
+## was reported and is discussed in bugreport #982719. The conditional must
+## be removed when the issue is fully understood and fixed.
+## --- Jerome Benoit <calculus@rezozer.net>  Sun, 28 Feb 2021 09:08:07 +0000
 override_dh_auto_test:
+ifeq ($(shell cat /proc/sys/kernel/unprivileged_userns_clone),0)
+	dh_auto_test
+endif
 
 override_dh_installinit:
 	dh_installinit --restart-after-upgrade
