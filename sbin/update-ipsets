@@ -4,8 +4,8 @@
 #
 #   Copyright
 #
-#       Copyright (C) 2003-2014 Costa Tsaousis <costa@tsaousis.gr>
-#       Copyright (C) 2012-2014 Phil Whineray <phil@sanewall.org>
+#       Copyright (C) 2015-2017 Costa Tsaousis <costa@tsaousis.gr>
+#       Copyright (C) 2015-2017 Phil Whineray <phil@sanewall.org>
 #
 #   License
 #
@@ -108,7 +108,7 @@ do
 done
 
 common_disable_localization || exit
-common_private_umask || exit
+common_public_umask || exit
 
 marksreset() { :; }
 markdef() { :; }
@@ -333,8 +333,19 @@ WEB_CHARTS_ENTRIES=${WEB_CHARTS_ENTRIES-500}
 # if the .git directory is present, push it also
 PUSH_TO_GIT=${PUSH_TO_GIT-0}
 
+# when PUSH_TO_GIT is enabled, this controls if each
+# ipset will get its own commit, or all files will be
+# committed together
+PUSH_TO_GIT_MERGED=${PUSH_TO_GIT_MERGED-1}
+
+# if we will also push github gh-pages
+PUSH_TO_GIT_WEB=${PUSH_TO_GIT_WEB-${PUSH_TO_GIT}}
+
 # the maximum time in seconds, to connect to the remote web server
 MAX_CONNECT_TIME=${MAX_CONNECT_TIME-10}
+
+# agent string to use when performing downloads
+USER_AGENT="FireHOL-Update-Ipsets/3.0 (linux-gnu) https://iplists.firehol.org/"
 
 # the maximum time in seconds any download may take
 MAX_DOWNLOAD_TIME=${MAX_DOWNLOAD_TIME-300}
@@ -362,15 +373,20 @@ WEB_OWNER=""
 # the ipset name is appended to it
 WEB_URL="http://iplists.firehol.org/?ipset="
 
+# the path to copy downloaded files to, using ${WEB_OWNER} permissions
+# if empty, do not copy them
+WEB_DIR_FOR_IPSETS=""
+
 # options for the web site
 # the ipset name will be appended
-GITHUB_LOCAL_COPY_URL="https://raw.githubusercontent.com/firehol/blocklist-ipsets/master/"
+LOCAL_COPY_URL="https://iplists.firehol.org/files/"
 GITHUB_CHANGES_URL="https://github.com/firehol/blocklist-ipsets/commits/master/"
 GITHUB_SETINFO="https://github.com/firehol/blocklist-ipsets/tree/master/"
 
 # -----------------------------------------------------------------------------
 # Command line parsing
 
+CLEANUP_OLD=0
 ENABLE_ALL=0
 IGNORE_LASTCHECKED=0
 FORCE_WEB_REBUILD=0
@@ -453,6 +469,8 @@ options are:
 			need to trigger a full refresh of the generated
 			metadata (it only affects the web site).
 
+	--cleanup 	Will cleanup obsolete ipsets that are not
+			available anymore.
 
 	run ipset1 ipset2 ...
 			Will only process the given ipsets.
@@ -482,6 +500,7 @@ do
 			break
 			;;
 
+		--cleanup) CLEANUP_OLD=1;;
 		--rebuild|-r) FORCE_WEB_REBUILD=1;;
 		--reprocess|-p) REPROCESS_ALL=1;;
 		--silent|-s) SILENT=1;;
@@ -824,12 +843,19 @@ commit_to_git() {
 		echo >&2
 		info "Committing ${to_be_pushed[@]} to git repository"
 		local date="$($DATE_CMD -u)"
-		# we commit each file alone, to have a clear history per file in github
-		for d in "${to_be_pushed[@]}" set_file_timestamps.sh
-		do
-			echo "${d}..."
-			$GIT_CMD commit "${d}" -m "${date} update"
-		done
+
+		if [ ${PUSH_TO_GIT_MERGED} -eq 0 ]
+			then
+			# we commit each file alone, to have a clear history per file in github
+			for d in "${to_be_pushed[@]}" set_file_timestamps.sh
+			do
+				echo "${d}..."
+				$GIT_CMD commit "${d}" -m "${date} update"
+			done
+		else
+			# we commit all files together
+			$GIT_CMD commit "${to_be_pushed[@]}" set_file_timestamps.sh -m "${date} update"
+		fi
 
 		if [ ${PUSH_TO_GIT} -ne 0 ]
 		then
@@ -838,6 +864,34 @@ commit_to_git() {
 			$GIT_CMD push
 		fi
 	fi
+}
+
+copy_ipsets_to_web() {
+	[ -z "${WEB_DIR_FOR_IPSETS}" -o ! -d "${WEB_DIR_FOR_IPSETS}" ] && return 0
+
+	local ipset= f= d=
+	for ipset in "${!UPDATED_SETS[@]}"
+	do
+		[ ! -z "${IPSET_TMP_DO_NOT_REDISTRIBUTE[${ipset}]}" ] && continue
+		[ ! -f "${UPDATED_SETS[${ipset}]}" ] && continue
+
+		# relative filename - may include a dir
+		f="${UPDATED_SETS[${ipset}]}"
+		d="${f/\/*/}"
+		[ "${d}" = "${f}" ] && d=
+
+		if [ ! -z "${d}" ]
+			then
+			echo >&2 "Creating directory ${WEB_DIR_FOR_IPSETS}/${d}"
+			${MKDIR_CMD} -p "${WEB_DIR_FOR_IPSETS}/${d}"
+			[ ! -z "${WEB_OWNER}" ] && ${CHOWN_CMD} "${WEB_OWNER}" "${WEB_DIR_FOR_IPSETS}/${d}"
+		fi
+
+		echo >&2 "Copying ${f} to ${WEB_DIR_FOR_IPSETS}/${f}"
+		${CP_CMD} "${f}" "${WEB_DIR_FOR_IPSETS}/${f}.new"
+		[ ! -z "${WEB_OWNER}" ] && ${CHOWN_CMD} "${WEB_OWNER}" "${WEB_DIR_FOR_IPSETS}/${f}.new"
+		${MV_CMD} "${WEB_DIR_FOR_IPSETS}/${f}.new" "${WEB_DIR_FOR_IPSETS}/${f}"
+	done
 }
 
 # touch a file to a relative date in the past
@@ -1002,7 +1056,7 @@ geturl() {
 	downloader_log verbose "curl ${doptions} '${url}'"
 	http_code=$( \
 		$CURL_CMD --connect-timeout ${MAX_CONNECT_TIME} --max-time ${MAX_DOWNLOAD_TIME} \
-			--retry 0 --fail --compressed --user-agent "FireHOL-Update-Ipsets/3.0 (linux-gnu)" \
+			--retry 0 --fail --compressed --user-agent "${USER_AGENT}" \
 			--time-cond "${reference}" --output "${file}" --remote-time \
 			--location --referer "http://iplists.firehol.org/" \
 			${curl_opts} --write-out '%{http_code}' "${doptions[@]}" "${url}" \
@@ -1370,11 +1424,12 @@ ipset_normalize_for_json() {
 }
 
 ipset_json() {
-	local ipset="${1}" geolite2= ipdeny= ip2location= comparison= info=
+	local ipset="${1}" geolite2= ipdeny= ip2location= ipip= comparison= info=
 
 	[ -f "${RUN_DIR}/${ipset}_geolite2_country.json"    ] && geolite2="${ipset}_geolite2_country.json"
 	[ -f "${RUN_DIR}/${ipset}_ipdeny_country.json"      ] && ipdeny="${ipset}_ipdeny_country.json"
 	[ -f "${RUN_DIR}/${ipset}_ip2location_country.json" ] && ip2location="${ipset}_ip2location_country.json"
+	[ -f "${RUN_DIR}/${ipset}_ipip_country.json"        ] && ipip="${ipset}_ipip_country.json"
 	[ -f "${RUN_DIR}/${ipset}_comparison.json"          ] && comparison="${ipset}_comparison.json"
 
 	info="${IPSET_INFO[${ipset}]}"
@@ -1385,7 +1440,7 @@ ipset_json() {
 	local commit_history=
 	if [ -z "${IPSET_TMP_DO_NOT_REDISTRIBUTE[${ipset}]}" ]
 		then
-		file_local="${GITHUB_LOCAL_COPY_URL}${IPSET_FILE[${ipset}]}"
+		file_local="${LOCAL_COPY_URL}${IPSET_FILE[${ipset}]}"
 		commit_history="${GITHUB_CHANGES_URL}${IPSET_FILE[${ipset}]}"
 	fi
 
@@ -1421,6 +1476,7 @@ ipset_json() {
 	"geolite2": "${geolite2}",
 	"ipdeny": "${ipdeny}",
 	"ip2location": "${ip2location}",
+	"ipip": "${ipip}",
 	"comparison": "${comparison}",
 	"file_local": "${file_local}",
 	"commit_history": "${commit_history}",
@@ -1895,7 +1951,7 @@ update_web() {
 		return 1
 	fi
 
-	local all=() updated=() geolite2_country=() ipdeny_country=() ip2location_country=() \
+	local all=() updated=() geolite2_country=() ipdeny_country=() ip2location_country=() ipip_country=() \
 		x= i= to_all= all_count=0 \
 		sitemap_date="$($DATE_CMD -I)"
 
@@ -1987,6 +2043,17 @@ update_web() {
 				*)							i= ;;
 			esac
 			[ ! -z "${i}" ] && ip2location_country=("${ip2location_country[@]}" "${IPSET_FILE[$x]}" "as" "${i^^}")
+
+		elif [[ "${IPSET_FILE[$x]}" =~ ^ipip_country.* ]]
+			then
+			ipset_verbose "${x}" "is an IPIP file"
+			to_all=0
+			case "${x}" in
+				ipip_country_*)				i=${x/ipip_country_/} ;;
+				ipip_continent_*)			i= ;;
+				*)							i= ;;
+			esac
+			[ ! -z "${i}" ] && ipip_country=("${ipip_country[@]}" "${IPSET_FILE[$x]}" "as" "${i^^}")
 		fi
 
 		if [ ${to_all} -eq 1 ]
@@ -2144,6 +2211,34 @@ update_web() {
 		done
 	fi
 
+	if [ "${#updated[*]}" -ne 0 -a "${#ipip_country[*]}" -ne 0 ]
+		then
+		print_ipset_reset
+
+		echo >&2 "-------------------------------------------------------------------------------"
+		echo >&2 "Comparing updated ipsets with IPIP country..."
+
+		${IPRANGE_CMD} "${updated[@]}" --compare-next "${ipip_country[@]}" |\
+			${GREP_CMD} -v ",0$" |\
+			$SORT_CMD |\
+			while IFS="," read name1 name2 entries1 entries2 ips1 ips2 combined common
+			do
+				if [ ! -f "${RUN_DIR}/${name1}_ipip_country.json" ]
+					then
+					printf "[\n" >"${RUN_DIR}/${name1}_ipip_country.json"
+				else
+					printf ",\n" >>"${RUN_DIR}/${name1}_ipip_country.json"
+				fi
+
+				printf "	{\n		\"code\": \"${name2}\",\n		\"value\": ${common}\n	}" >>"${RUN_DIR}/${name1}_ipip_country.json"
+			done
+		echo >&2
+		for x in $($FIND_CMD "${RUN_DIR}" -name \*_ipip_country.json)
+		do
+			printf "\n]\n" >>${x}
+		done
+	fi
+
 	echo >&2 "-------------------------------------------------------------------------------"
 	echo >&2 "Generating updated ipsets JSON files..."
 
@@ -2165,6 +2260,7 @@ update_web() {
 		[[ "${IPSET_FILE[$x]}" =~ ^geolite2.* ]] && continue
 		[[ "${IPSET_FILE[$x]}" =~ ^ipdeny.* ]] && continue
 		[[ "${IPSET_FILE[$x]}" =~ ^ip2location.* ]] && continue
+		[[ "${IPSET_FILE[$x]}" =~ ^ipip.* ]] && continue
 
 		retention_detect "${x}" >"${RUN_DIR}/${x}_retention.json" || $RM_CMD "${RUN_DIR}/${x}_retention.json"
 
@@ -2183,17 +2279,23 @@ update_web() {
 	$MV_CMD -f "${RUN_DIR}"/*.{json,csv,xml} "${WEB_DIR}/"
 	[ ! -z "${WEB_OWNER}" ] && $CHOWN_CMD ${WEB_OWNER} "${WEB_DIR}"/*.{json,csv,xml}
 
-	if [ ${PUSH_TO_GIT} -eq 1 ]
+	if [ -d "${WEB_DIR}/.git" ]
 		then
 		print_ipset_reset
 
 		echo >&2 "-------------------------------------------------------------------------------"
-		echo >&2 "Pushing generated web files to git..."
+		echo >&2 "Adding generated web files to git..."
 
 		cd "${WEB_DIR}" || return 1
 		$GIT_CMD add *.json *.csv *.xml
 		$GIT_CMD commit -a -m "$($DATE_CMD -u) update"
-		$GIT_CMD push origin gh-pages
+
+		if [ ${PUSH_TO_GIT_WEB} -eq 1 ]
+			then
+			echo >&2 "Pushing generated web files to git..."
+			$GIT_CMD push origin gh-pages
+		fi
+
 		cd "${BASE_DIR}" || exit 1
 
 		echo >&2
@@ -2890,12 +2992,19 @@ rename_ipset() {
 
 	if [ -d "${WEB_DIR}" ]
 		then
-		for x in _comparison.json _geolite2_country.json _ipdeny_country.json _ip2location_country.json _history.csv retention.json .json .html
+		for x in _comparison.json _geolite2_country.json _ipdeny_country.json _ip2location_country.json _ipip_country.json _history.csv retention.json .json .html
 		do
 			if [ -f "${WEB_DIR}/${old}${x}" -a ! -f "${WEB_DIR}/${new}${x}" ]
 				then
-				$GIT_CMD -C "${WEB_DIR}" mv -f "${old}${x}" "${new}${x}"
-				$GIT_CMD -C "${WEB_DIR}" commit "${old}${x}" "${new}${x}" -m "renamed from ${old}${x} to ${new}${x}"
+				if [ -d "${WEB_DIR}/.git" ]
+					then
+					ipset_info "${old}" "git renaming ${WEB_DIR}/${old}${x} ${WEB_DIR}/${new}${x}"
+					$GIT_CMD -C "${WEB_DIR}" mv -f "${old}${x}" "${new}${x}"
+					$GIT_CMD -C "${WEB_DIR}" commit "${old}${x}" "${new}${x}" -m "renamed from ${old}${x} to ${new}${x}"
+				else
+					ipset_info "${old}" "renaming ${WEB_DIR}/${old}${x} ${WEB_DIR}/${new}${x}"
+					$MV_CMD -f "${old}${x}" "${new}${x}"
+				fi
 			fi
 		done
 	fi
@@ -2938,6 +3047,77 @@ rename_ipset() {
 	[ -z "${IPSET_DOWNLOADER[${new}]}" ] && IPSET_DOWNLOADER[${new}]="${IPSET_DOWNLOADER[${old}]}"
 	[ -z "${IPSET_DOWNLOADER_OPTIONS[${new}]}" ] && IPSET_DOWNLOADER_OPTIONS[${new}]="${IPSET_DOWNLOADER_OPTIONS[${old}]}"
 	cache_remove_ipset "${old}" # this also saves the cache
+
+	cd "${RUN_DIR}"
+	return 0
+}
+
+delete_ipset() {
+	local ipset="${1}"
+
+	[ -z "${ipset}" ] && return 1
+	[ "${CLEANUP_OLD}" != "1" ] && return 0
+
+	cd "${BASE_DIR}" || return 1
+
+	for x in ipset netset source split setinfo
+	do
+		if [ -f "${BASE_DIR}/${ipset}.${x}" ]
+			then
+
+			if [ -d "${BASE_DIR}/.git" ]
+				then
+				ipset_info "${ipset}" "git deleting ${BASE_DIR}/${ipset}.${x}"
+				$GIT_CMD -C "${BASE_DIR}" rm "${ipset}.${x}"
+				$GIT_CMD -C "${BASE_DIR}" commit "${ipset}.${x}" -m "deleted ${ipset}.${x}"
+			fi
+
+			if [ -f "${BASE_DIR}/${ipset}.${x}" ]
+				then
+				ipset_info "${ipset}" "deleting ${BASE_DIR}/${ipset}.${x}"
+				$RM_CMD "${BASE_DIR}/${ipset}.${x}" || exit 1
+			fi
+		fi
+	done
+
+	if [ -d "${HISTORY_DIR}/${ipset}" ]
+		then
+		ipset_info "${ipset}" "deleting ${HISTORY_DIR}/${ipset}"
+		cd "${HISTORY_DIR}" && $RM_CMD -rf "${ipset}"
+		cd "${BASE_DIR}" || return 1
+	fi
+
+	if [ ! -z "${LIB_DIR}" -a -d "${LIB_DIR}" -a -d "${LIB_DIR}/${ipset}" ]
+		then
+		ipset_info "${ipset}" "deleting ${LIB_DIR}/${ipset}"
+		cd "${LIB_DIR}" && $RM_CMD -rf "${ipset}"
+		cd "${BASE_DIR}" || return 1
+	fi
+
+	if [ -d "${WEB_DIR}" ]
+		then
+		for x in _comparison.json _geolite2_country.json _ipdeny_country.json _ip2location_country.json _ipip_country.json _history.csv retention.json .json .html
+		do
+			if [ -f "${WEB_DIR}/${ipset}${x}" ]
+				then
+
+				if [ -d "${WEB_DIR}/.git" ]
+					then
+					ipset_info "${ipset}" "git deleting ${WEB_DIR}/${ipset}${x}"
+					$GIT_CMD -C "${WEB_DIR}" rm "${ipset}${x}"
+					$GIT_CMD -C "${WEB_DIR}" commit "${ipset}${x}" -m "deleted ${ipset}${x}"
+				fi
+
+				if [ -f "${WEB_DIR}/${ipset}${x}" ]
+					then
+					ipset_info "${ipset}" "deleting ${WEB_DIR}/${ipset}${x}"
+					$RM_CMD -f "${WEB_DIR}/${ipset}${x}"
+				fi
+			fi
+		done
+	fi
+
+	cache_remove_ipset "${ipset}" # this also saves the cache
 
 	cd "${RUN_DIR}"
 	return 0
@@ -3502,8 +3682,24 @@ geolite2_country() {
 
 		info2="`$CAT_CMD "${x}.info"` -- ${info}"
 
-		finalize "${i}" "${tmp}" "${ipset}.source" "${ipset}/${i}.netset" "${mins}" "${history_mins}" "${ipv}" "${limit}" "${hash}" "${url}" "geolocation" "${info2}" "MaxMind.com" "http://www.maxmind.com/" \
+		finalize "${i}" \
+			"${tmp}" \
+			"${ipset}.source" \
+			"${ipset}/${i}.netset" \
+			"${mins}" \
+			"${history_mins}" \
+			"${ipv}" \
+			"${limit}" \
+			"${hash}" \
+			"${url}" \
+			"geolocation" \
+			"${info2}" \
+			"MaxMind.com" \
+			"http://www.maxmind.com/" \
 			service "geolocation"
+
+		[ -f "${BASE_DIR}/${i}.setinfo" ] && $MV_CMD -f "${BASE_DIR}/${i}.setinfo" "${BASE_DIR}/${ipset}/${i}.setinfo"
+
 	done
 
 	if [ -d "${BASE_DIR}/.git" ]
@@ -3519,8 +3715,8 @@ geolite2_country() {
 	return 0
 }
 
-declare -A IPDENY_COUNTRY_NAMES='([eu]="European Union" [ap]="African Regional Industrial Property Organization" [as]="American Samoa" [ge]="Georgia" [ar]="Argentina" [gd]="Grenada" [dm]="Dominica" [kp]="North Korea" [rw]="Rwanda" [gg]="Guernsey" [qa]="Qatar" [ni]="Nicaragua" [do]="Dominican Republic" [gf]="French Guiana" [ru]="Russia" [kr]="Republic of Korea" [aw]="Aruba" [ga]="Gabon" [rs]="Serbia" [no]="Norway" [nl]="Netherlands" [au]="Australia" [kw]="Kuwait" [dj]="Djibouti" [at]="Austria" [gb]="United Kingdom" [dk]="Denmark" [ky]="Cayman Islands" [gm]="Gambia" [ug]="Uganda" [gl]="Greenland" [de]="Germany" [nc]="New Caledonia" [az]="Azerbaijan" [hr]="Croatia" [na]="Namibia" [gn]="Guinea" [kz]="Kazakhstan" [et]="Ethiopia" [ht]="Haiti" [es]="Spain" [gi]="Gibraltar" [nf]="Norfolk Island" [ng]="Nigeria" [gh]="Ghana" [hu]="Hungary" [er]="Eritrea" [ua]="Ukraine" [ne]="Niger" [yt]="Mayotte" [gu]="Guam" [nz]="New Zealand" [om]="Oman" [gt]="Guatemala" [gw]="Guinea-Bissau" [hk]="Hong Kong" [re]="Réunion" [ag]="Antigua and Barbuda" [gq]="Equatorial Guinea" [ke]="Kenya" [gp]="Guadeloupe" [uz]="Uzbekistan" [af]="Afghanistan" [hn]="Honduras" [uy]="Uruguay" [dz]="Algeria" [kg]="Kyrgyzstan" [ae]="United Arab Emirates" [ad]="Andorra" [gr]="Greece" [ki]="Kiribati" [nr]="Nauru" [eg]="Egypt" [kh]="Cambodia" [ro]="Romania" [ai]="Anguilla" [np]="Nepal" [ee]="Estonia" [us]="United States" [ec]="Ecuador" [gy]="Guyana" [ao]="Angola" [km]="Comoros" [am]="Armenia" [ye]="Yemen" [nu]="Niue" [kn]="Saint Kitts and Nevis" [al]="Albania" [si]="Slovenia" [fr]="France" [bf]="Burkina Faso" [mw]="Malawi" [cy]="Cyprus" [vc]="Saint Vincent and the Grenadines" [mv]="Maldives" [bg]="Bulgaria" [pr]="Puerto Rico" [sk]="Slovak Republic" [bd]="Bangladesh" [mu]="Mauritius" [ps]="Palestine" [va]="Vatican City" [cz]="Czech Republic" [be]="Belgium" [mt]="Malta" [zm]="Zambia" [ms]="Montserrat" [bb]="Barbados" [sm]="San Marino" [pt]="Portugal" [io]="British Indian Ocean Territory" [vg]="British Virgin Islands" [sl]="Sierra Leone" [mr]="Mauritania" [la]="Laos" [in]="India" [ws]="Samoa" [mq]="Martinique" [im]="Isle of Man" [lb]="Lebanon" [tz]="Tanzania" [so]="Somalia" [mp]="Northern Mariana Islands" [ve]="Venezuela" [lc]="Saint Lucia" [ba]="Bosnia and Herzegovina" [sn]="Senegal" [pw]="Palau" [il]="Israel" [tt]="Trinidad and Tobago" [bn]="Brunei" [sa]="Saudi Arabia" [bo]="Bolivia" [py]="Paraguay" [bl]="Saint-Barthélemy" [tv]="Tuvalu" [sc]="Seychelles" [vi]="U.S. Virgin Islands" [cr]="Costa Rica" [bm]="Bermuda" [sb]="Solomon Islands" [tw]="Taiwan" [cu]="Cuba" [se]="Sweden" [bj]="Benin" [vn]="Vietnam" [li]="Liechtenstein" [mz]="Mozambique" [sd]="Sudan" [cw]="Curaçao" [ie]="Ireland" [sg]="Singapore" [jp]="Japan" [my]="Malaysia" [tr]="Turkey" [bh]="Bahrain" [mx]="Mexico" [cv]="Cape Verde" [id]="Indonesia" [lk]="Sri Lanka" [za]="South Africa" [bi]="Burundi" [ci]="Ivory Coast" [tl]="East Timor" [mg]="Madagascar" [lt]="Republic of Lithuania" [sy]="Syria" [sx]="Sint Maarten" [pa]="Panama" [mf]="Saint Martin" [lu]="Luxembourg" [ch]="Switzerland" [tm]="Turkmenistan" [bw]="Botswana" [jo]="Hashemite Kingdom of Jordan" [me]="Montenegro" [tn]="Tunisia" [ck]="Cook Islands" [bt]="Bhutan" [lv]="Latvia" [wf]="Wallis and Futuna" [to]="Tonga" [jm]="Jamaica" [sz]="Swaziland" [md]="Republic of Moldova" [br]="Brazil" [mc]="Monaco" [cm]="Cameroon" [th]="Thailand" [pe]="Peru" [cl]="Chile" [bs]="Bahamas" [pf]="French Polynesia" [co]="Colombia" [ma]="Morocco" [lr]="Liberia" [tj]="Tajikistan" [bq]="Bonaire, Sint Eustatius, and Saba" [tk]="Tokelau" [vu]="Vanuatu" [pg]="Papua New Guinea" [cn]="China" [ls]="Lesotho" [ca]="Canada" [is]="Iceland" [td]="Chad" [fj]="Fiji" [mo]="Macao" [ph]="Philippines" [mn]="Mongolia" [zw]="Zimbabwe" [ir]="Iran" [ss]="South Sudan" [mm]="Myanmar (Burma)" [iq]="Iraq" [sr]="Suriname" [je]="Jersey" [ml]="Mali" [tg]="Togo" [pk]="Pakistan" [fi]="Finland" [bz]="Belize" [pl]="Poland" [mk]="F.Y.R.O.M." [pm]="Saint Pierre and Miquelon" [fo]="Faroe Islands" [st]="São Tomé and Príncipe" [ly]="Libya" [cd]="Congo" [cg]="Republic of the Congo" [sv]="El Salvador" [tc]="Turks and Caicos Islands" [it]="Italy" [fm]="Federated States of Micronesia" [mh]="Marshall Islands" [by]="Belarus" [cf]="Central African Republic" )'
-declare -A IPDENY_COUNTRY_CONTINENTS='([eu]="eu" [ap]="af" [as]="oc" [ge]="as" [ar]="sa" [gd]="na" [dm]="na" [kp]="as" [rw]="af" [gg]="eu" [qa]="as" [ni]="na" [do]="na" [gf]="sa" [ru]="eu" [kr]="as" [aw]="na" [ga]="af" [rs]="eu" [no]="eu" [nl]="eu" [au]="oc" [kw]="as" [dj]="af" [at]="eu" [gb]="eu" [dk]="eu" [ky]="na" [gm]="af" [ug]="af" [gl]="na" [de]="eu" [nc]="oc" [az]="as" [hr]="eu" [na]="af" [gn]="af" [kz]="as" [et]="af" [ht]="na" [es]="eu" [gi]="eu" [nf]="oc" [ng]="af" [gh]="af" [hu]="eu" [er]="af" [ua]="eu" [ne]="af" [yt]="af" [gu]="oc" [nz]="oc" [om]="as" [gt]="na" [gw]="af" [hk]="as" [re]="af" [ag]="na" [gq]="af" [ke]="af" [gp]="na" [uz]="as" [af]="as" [hn]="na" [uy]="sa" [dz]="af" [kg]="as" [ae]="as" [ad]="eu" [gr]="eu" [ki]="oc" [nr]="oc" [eg]="af" [kh]="as" [ro]="eu" [ai]="na" [np]="as" [ee]="eu" [us]="na" [ec]="sa" [gy]="sa" [ao]="af" [km]="af" [am]="as" [ye]="as" [nu]="oc" [kn]="na" [al]="eu" [si]="eu" [fr]="eu" [bf]="af" [mw]="af" [cy]="eu" [vc]="na" [mv]="as" [bg]="eu" [pr]="na" [sk]="eu" [bd]="as" [mu]="af" [ps]="as" [va]="eu" [cz]="eu" [be]="eu" [mt]="eu" [zm]="af" [ms]="na" [bb]="na" [sm]="eu" [pt]="eu" [io]="as" [vg]="na" [sl]="af" [mr]="af" [la]="as" [in]="as" [ws]="oc" [mq]="na" [im]="eu" [lb]="as" [tz]="af" [so]="af" [mp]="oc" [ve]="sa" [lc]="na" [ba]="eu" [sn]="af" [pw]="oc" [il]="as" [tt]="na" [bn]="as" [sa]="as" [bo]="sa" [py]="sa" [bl]="na" [tv]="oc" [sc]="af" [vi]="na" [cr]="na" [bm]="na" [sb]="oc" [tw]="as" [cu]="na" [se]="eu" [bj]="af" [vn]="as" [li]="eu" [mz]="af" [sd]="af" [cw]="na" [ie]="eu" [sg]="as" [jp]="as" [my]="as" [tr]="as" [bh]="as" [mx]="na" [cv]="af" [id]="as" [lk]="as" [za]="af" [bi]="af" [ci]="af" [tl]="oc" [mg]="af" [lt]="eu" [sy]="as" [sx]="na" [pa]="na" [mf]="na" [lu]="eu" [ch]="eu" [tm]="as" [bw]="af" [jo]="as" [me]="eu" [tn]="af" [ck]="oc" [bt]="as" [lv]="eu" [wf]="oc" [to]="oc" [jm]="na" [sz]="af" [md]="eu" [br]="sa" [mc]="eu" [cm]="af" [th]="as" [pe]="sa" [cl]="sa" [bs]="na" [pf]="oc" [co]="sa" [ma]="af" [lr]="af" [tj]="as" [bq]="na" [tk]="oc" [vu]="oc" [pg]="oc" [cn]="as" [ls]="af" [ca]="na" [is]="eu" [td]="af" [fj]="oc" [mo]="as" [ph]="as" [mn]="as" [zw]="af" [ir]="as" [ss]="af" [mm]="as" [iq]="as" [sr]="sa" [je]="eu" [ml]="af" [tg]="af" [pk]="as" [fi]="eu" [bz]="na" [pl]="eu" [mk]="eu" [pm]="na" [fo]="eu" [st]="af" [ly]="af" [cd]="af" [cg]="af" [sv]="na" [tc]="na" [it]="eu" [fm]="oc" [mh]="oc" [by]="eu" [cf]="af" )'
+declare -A IPDENY_COUNTRY_NAMES='([eu]="European Union" [ap]="African Regional Industrial Property Organization" [as]="American Samoa" [ge]="Georgia" [ar]="Argentina" [gd]="Grenada" [dm]="Dominica" [kp]="North Korea" [rw]="Rwanda" [gg]="Guernsey" [qa]="Qatar" [ni]="Nicaragua" [do]="Dominican Republic" [gf]="French Guiana" [ru]="Russia" [kr]="Republic of Korea" [aw]="Aruba" [ga]="Gabon" [rs]="Serbia" [no]="Norway" [nl]="Netherlands" [au]="Australia" [kw]="Kuwait" [dj]="Djibouti" [at]="Austria" [gb]="United Kingdom" [dk]="Denmark" [ky]="Cayman Islands" [gm]="Gambia" [ug]="Uganda" [gl]="Greenland" [de]="Germany" [nc]="New Caledonia" [az]="Azerbaijan" [hr]="Croatia" [na]="Namibia" [gn]="Guinea" [kz]="Kazakhstan" [et]="Ethiopia" [ht]="Haiti" [es]="Spain" [gi]="Gibraltar" [nf]="Norfolk Island" [ng]="Nigeria" [gh]="Ghana" [hu]="Hungary" [er]="Eritrea" [ua]="Ukraine" [ne]="Niger" [yt]="Mayotte" [gu]="Guam" [nz]="New Zealand" [om]="Oman" [gt]="Guatemala" [gw]="Guinea-Bissau" [hk]="Hong Kong" [re]="Réunion" [ag]="Antigua and Barbuda" [gq]="Equatorial Guinea" [ke]="Kenya" [gp]="Guadeloupe" [uz]="Uzbekistan" [af]="Afghanistan" [hn]="Honduras" [uy]="Uruguay" [dz]="Algeria" [kg]="Kyrgyzstan" [ae]="United Arab Emirates" [ad]="Andorra" [gr]="Greece" [ki]="Kiribati" [nr]="Nauru" [eg]="Egypt" [kh]="Cambodia" [ro]="Romania" [ai]="Anguilla" [np]="Nepal" [ee]="Estonia" [us]="United States" [ec]="Ecuador" [gy]="Guyana" [ao]="Angola" [km]="Comoros" [am]="Armenia" [ye]="Yemen" [nu]="Niue" [kn]="Saint Kitts and Nevis" [al]="Albania" [si]="Slovenia" [fr]="France" [bf]="Burkina Faso" [mw]="Malawi" [cy]="Cyprus" [vc]="Saint Vincent and the Grenadines" [mv]="Maldives" [bg]="Bulgaria" [pr]="Puerto Rico" [sk]="Slovak Republic" [bd]="Bangladesh" [mu]="Mauritius" [ps]="Palestine" [va]="Vatican City" [cz]="Czech Republic" [be]="Belgium" [mt]="Malta" [zm]="Zambia" [ms]="Montserrat" [bb]="Barbados" [sm]="San Marino" [pt]="Portugal" [io]="British Indian Ocean Territory" [vg]="British Virgin Islands" [sl]="Sierra Leone" [mr]="Mauritania" [la]="Laos" [in]="India" [ws]="Samoa" [mq]="Martinique" [im]="Isle of Man" [lb]="Lebanon" [tz]="Tanzania" [so]="Somalia" [mp]="Northern Mariana Islands" [ve]="Venezuela" [lc]="Saint Lucia" [ba]="Bosnia and Herzegovina" [sn]="Senegal" [pw]="Palau" [il]="Israel" [tt]="Trinidad and Tobago" [bn]="Brunei" [sa]="Saudi Arabia" [bo]="Bolivia" [py]="Paraguay" [bl]="Saint-Barthélemy" [tv]="Tuvalu" [sc]="Seychelles" [vi]="U.S. Virgin Islands" [cr]="Costa Rica" [bm]="Bermuda" [sb]="Solomon Islands" [tw]="Taiwan" [cu]="Cuba" [se]="Sweden" [bj]="Benin" [vn]="Vietnam" [li]="Liechtenstein" [mz]="Mozambique" [sd]="Sudan" [cw]="Curaçao" [ie]="Ireland" [sg]="Singapore" [jp]="Japan" [my]="Malaysia" [tr]="Turkey" [bh]="Bahrain" [mx]="Mexico" [cv]="Cape Verde" [id]="Indonesia" [lk]="Sri Lanka" [za]="South Africa" [bi]="Burundi" [ci]="Ivory Coast" [tl]="East Timor" [mg]="Madagascar" [lt]="Republic of Lithuania" [sy]="Syria" [sx]="Sint Maarten" [pa]="Panama" [mf]="Saint Martin" [lu]="Luxembourg" [ch]="Switzerland" [tm]="Turkmenistan" [bw]="Botswana" [jo]="Hashemite Kingdom of Jordan" [me]="Montenegro" [tn]="Tunisia" [ck]="Cook Islands" [bt]="Bhutan" [lv]="Latvia" [wf]="Wallis and Futuna" [to]="Tonga" [jm]="Jamaica" [sz]="Swaziland" [md]="Republic of Moldova" [br]="Brazil" [mc]="Monaco" [cm]="Cameroon" [th]="Thailand" [pe]="Peru" [cl]="Chile" [bs]="Bahamas" [pf]="French Polynesia" [co]="Colombia" [ma]="Morocco" [lr]="Liberia" [tj]="Tajikistan" [bq]="Bonaire, Sint Eustatius, and Saba" [tk]="Tokelau" [vu]="Vanuatu" [pg]="Papua New Guinea" [cn]="China" [ls]="Lesotho" [ca]="Canada" [is]="Iceland" [td]="Chad" [fj]="Fiji" [mo]="Macao" [ph]="Philippines" [mn]="Mongolia" [zw]="Zimbabwe" [ir]="Iran" [ss]="South Sudan" [mm]="Myanmar (Burma)" [iq]="Iraq" [sr]="Suriname" [je]="Jersey" [ml]="Mali" [tg]="Togo" [pk]="Pakistan" [fi]="Finland" [bz]="Belize" [pl]="Poland" [mk]="F.Y.R.O.M." [pm]="Saint Pierre and Miquelon" [fo]="Faroe Islands" [st]="São Tomé and Príncipe" [ly]="Libya" [cd]="Congo" [cg]="Republic of the Congo" [sv]="El Salvador" [tc]="Turks and Caicos Islands" [it]="Italy" [fm]="Federated States of Micronesia" [mh]="Marshall Islands" [by]="Belarus" [cf]="Central African Republic" [cx]="Christmas Island" [xk]="Kosovo" [aq]="Antarctic")'
+declare -A IPDENY_COUNTRY_CONTINENTS='([eu]="eu" [ap]="af" [as]="oc" [ge]="as" [ar]="sa" [gd]="na" [dm]="na" [kp]="as" [rw]="af" [gg]="eu" [qa]="as" [ni]="na" [do]="na" [gf]="sa" [ru]="eu" [kr]="as" [aw]="na" [ga]="af" [rs]="eu" [no]="eu" [nl]="eu" [au]="oc" [kw]="as" [dj]="af" [at]="eu" [gb]="eu" [dk]="eu" [ky]="na" [gm]="af" [ug]="af" [gl]="na" [de]="eu" [nc]="oc" [az]="as" [hr]="eu" [na]="af" [gn]="af" [kz]="as" [et]="af" [ht]="na" [es]="eu" [gi]="eu" [nf]="oc" [ng]="af" [gh]="af" [hu]="eu" [er]="af" [ua]="eu" [ne]="af" [yt]="af" [gu]="oc" [nz]="oc" [om]="as" [gt]="na" [gw]="af" [hk]="as" [re]="af" [ag]="na" [gq]="af" [ke]="af" [gp]="na" [uz]="as" [af]="as" [hn]="na" [uy]="sa" [dz]="af" [kg]="as" [ae]="as" [ad]="eu" [gr]="eu" [ki]="oc" [nr]="oc" [eg]="af" [kh]="as" [ro]="eu" [ai]="na" [np]="as" [ee]="eu" [us]="na" [ec]="sa" [gy]="sa" [ao]="af" [km]="af" [am]="as" [ye]="as" [nu]="oc" [kn]="na" [al]="eu" [si]="eu" [fr]="eu" [bf]="af" [mw]="af" [cy]="eu" [vc]="na" [mv]="as" [bg]="eu" [pr]="na" [sk]="eu" [bd]="as" [mu]="af" [ps]="as" [va]="eu" [cz]="eu" [be]="eu" [mt]="eu" [zm]="af" [ms]="na" [bb]="na" [sm]="eu" [pt]="eu" [io]="as" [vg]="na" [sl]="af" [mr]="af" [la]="as" [in]="as" [ws]="oc" [mq]="na" [im]="eu" [lb]="as" [tz]="af" [so]="af" [mp]="oc" [ve]="sa" [lc]="na" [ba]="eu" [sn]="af" [pw]="oc" [il]="as" [tt]="na" [bn]="as" [sa]="as" [bo]="sa" [py]="sa" [bl]="na" [tv]="oc" [sc]="af" [vi]="na" [cr]="na" [bm]="na" [sb]="oc" [tw]="as" [cu]="na" [se]="eu" [bj]="af" [vn]="as" [li]="eu" [mz]="af" [sd]="af" [cw]="na" [ie]="eu" [sg]="as" [jp]="as" [my]="as" [tr]="as" [bh]="as" [mx]="na" [cv]="af" [id]="as" [lk]="as" [za]="af" [bi]="af" [ci]="af" [tl]="oc" [mg]="af" [lt]="eu" [sy]="as" [sx]="na" [pa]="na" [mf]="na" [lu]="eu" [ch]="eu" [tm]="as" [bw]="af" [jo]="as" [me]="eu" [tn]="af" [ck]="oc" [bt]="as" [lv]="eu" [wf]="oc" [to]="oc" [jm]="na" [sz]="af" [md]="eu" [br]="sa" [mc]="eu" [cm]="af" [th]="as" [pe]="sa" [cl]="sa" [bs]="na" [pf]="oc" [co]="sa" [ma]="af" [lr]="af" [tj]="as" [bq]="na" [tk]="oc" [vu]="oc" [pg]="oc" [cn]="as" [ls]="af" [ca]="na" [is]="eu" [td]="af" [fj]="oc" [mo]="as" [ph]="as" [mn]="as" [zw]="af" [ir]="as" [ss]="af" [mm]="as" [iq]="as" [sr]="sa" [je]="eu" [ml]="af" [tg]="af" [pk]="as" [fi]="eu" [bz]="na" [pl]="eu" [mk]="eu" [pm]="na" [fo]="eu" [st]="af" [ly]="af" [cd]="af" [cg]="af" [sv]="na" [tc]="na" [it]="eu" [fm]="oc" [mh]="oc" [by]="eu" [cf]="af" [xk]="eu" [cx]="as")'
 declare -A IPDENY_COUNTRIES=()
 declare -A IPDENY_CONTINENTS=()
 ipdeny_country() {
@@ -3623,8 +3819,24 @@ ipdeny_country() {
 		$TOUCH_CMD -r "${BASE_DIR}/${ipset}.source" "${tmp}"
 		$RM_CMD "${x}"
 
-		finalize "${i}" "${tmp}" "${ipset}.source" "${ipset}/${i}.netset" "${mins}" "${history_mins}" "${ipv}" "${limit}" "${hash}" "${url}" "geolocation" "${info2}" "IPDeny.com" "http://www.ipdeny.com/" \
+		finalize "${i}" \
+			"${tmp}" \
+			"${ipset}.source" \
+			"${ipset}/${i}.netset" \
+			"${mins}" \
+			"${history_mins}" \
+			"${ipv}" \
+			"${limit}" \
+			"${hash}" \
+			"${url}" \
+			"geolocation" \
+			"${info2}" \
+			"IPDeny.com" \
+			"http://www.ipdeny.com/" \
 			service "geolocation"
+
+		[ -f "${BASE_DIR}/${i}.setinfo" ] && $MV_CMD -f "${BASE_DIR}/${i}.setinfo" "${BASE_DIR}/${ipset}/${i}.setinfo"
+
 	done
 
 	if [ -d "${BASE_DIR}/.git" ]
@@ -3641,7 +3853,7 @@ ipdeny_country() {
 }
 
 declare -A IP2LOCATION_COUNTRY_NAMES=()
-declare -A IP2LOCATION_COUNTRY_CONTINENTS='([aq]="aq" [gs]="eu" [um]="na" [fk]="sa" [ax]="eu" [as]="oc" [ge]="as" [ar]="sa" [gd]="na" [dm]="na" [kp]="as" [rw]="af" [gg]="eu" [qa]="as" [ni]="na" [do]="na" [gf]="sa" [ru]="eu" [kr]="as" [aw]="na" [ga]="af" [rs]="eu" [no]="eu" [nl]="eu" [au]="oc" [kw]="as" [dj]="af" [at]="eu" [gb]="eu" [dk]="eu" [ky]="na" [gm]="af" [ug]="af" [gl]="na" [de]="eu" [nc]="oc" [az]="as" [hr]="eu" [na]="af" [gn]="af" [kz]="as" [et]="af" [ht]="na" [es]="eu" [gi]="eu" [nf]="oc" [ng]="af" [gh]="af" [hu]="eu" [er]="af" [ua]="eu" [ne]="af" [yt]="af" [gu]="oc" [nz]="oc" [om]="as" [gt]="na" [gw]="af" [hk]="as" [re]="af" [ag]="na" [gq]="af" [ke]="af" [gp]="na" [uz]="as" [af]="as" [hn]="na" [uy]="sa" [dz]="af" [kg]="as" [ae]="as" [ad]="eu" [gr]="eu" [ki]="oc" [nr]="oc" [eg]="af" [kh]="as" [ro]="eu" [ai]="na" [np]="as" [ee]="eu" [us]="na" [ec]="sa" [gy]="sa" [ao]="af" [km]="af" [am]="as" [ye]="as" [nu]="oc" [kn]="na" [al]="eu" [si]="eu" [fr]="eu" [bf]="af" [mw]="af" [cy]="eu" [vc]="na" [mv]="as" [bg]="eu" [pr]="na" [sk]="eu" [bd]="as" [mu]="af" [ps]="as" [va]="eu" [cz]="eu" [be]="eu" [mt]="eu" [zm]="af" [ms]="na" [bb]="na" [sm]="eu" [pt]="eu" [io]="as" [vg]="na" [sl]="af" [mr]="af" [la]="as" [in]="as" [ws]="oc" [mq]="na" [im]="eu" [lb]="as" [tz]="af" [so]="af" [mp]="oc" [ve]="sa" [lc]="na" [ba]="eu" [sn]="af" [pw]="oc" [il]="as" [tt]="na" [bn]="as" [sa]="as" [bo]="sa" [py]="sa" [bl]="na" [tv]="oc" [sc]="af" [vi]="na" [cr]="na" [bm]="na" [sb]="oc" [tw]="as" [cu]="na" [se]="eu" [bj]="af" [vn]="as" [li]="eu" [mz]="af" [sd]="af" [cw]="na" [ie]="eu" [sg]="as" [jp]="as" [my]="as" [tr]="as" [bh]="as" [mx]="na" [cv]="af" [id]="as" [lk]="as" [za]="af" [bi]="af" [ci]="af" [tl]="oc" [mg]="af" [lt]="eu" [sy]="as" [sx]="na" [pa]="na" [mf]="na" [lu]="eu" [ch]="eu" [tm]="as" [bw]="af" [jo]="as" [me]="eu" [tn]="af" [ck]="oc" [bt]="as" [lv]="eu" [wf]="oc" [to]="oc" [jm]="na" [sz]="af" [md]="eu" [br]="sa" [mc]="eu" [cm]="af" [th]="as" [pe]="sa" [cl]="sa" [bs]="na" [pf]="oc" [co]="sa" [ma]="af" [lr]="af" [tj]="as" [bq]="na" [tk]="oc" [vu]="oc" [pg]="oc" [cn]="as" [ls]="af" [ca]="na" [is]="eu" [td]="af" [fj]="oc" [mo]="as" [ph]="as" [mn]="as" [zw]="af" [ir]="as" [ss]="af" [mm]="as" [iq]="as" [sr]="sa" [je]="eu" [ml]="af" [tg]="af" [pk]="as" [fi]="eu" [bz]="na" [pl]="eu" [mk]="eu" [pm]="na" [fo]="eu" [st]="af" [ly]="af" [cd]="af" [cg]="af" [sv]="na" [tc]="na" [it]="eu" [fm]="oc" [mh]="oc" [by]="eu" [cf]="af" )'
+declare -A IP2LOCATION_COUNTRY_CONTINENTS='([aq]="aq" [gs]="eu" [um]="na" [fk]="sa" [ax]="eu" [as]="oc" [ge]="as" [ar]="sa" [gd]="na" [dm]="na" [kp]="as" [rw]="af" [gg]="eu" [qa]="as" [ni]="na" [do]="na" [gf]="sa" [ru]="eu" [kr]="as" [aw]="na" [ga]="af" [rs]="eu" [no]="eu" [nl]="eu" [au]="oc" [kw]="as" [dj]="af" [at]="eu" [gb]="eu" [dk]="eu" [ky]="na" [gm]="af" [ug]="af" [gl]="na" [de]="eu" [nc]="oc" [az]="as" [hr]="eu" [na]="af" [gn]="af" [kz]="as" [et]="af" [ht]="na" [es]="eu" [gi]="eu" [nf]="oc" [ng]="af" [gh]="af" [hu]="eu" [er]="af" [ua]="eu" [ne]="af" [yt]="af" [gu]="oc" [nz]="oc" [om]="as" [gt]="na" [gw]="af" [hk]="as" [re]="af" [ag]="na" [gq]="af" [ke]="af" [gp]="na" [uz]="as" [af]="as" [hn]="na" [uy]="sa" [dz]="af" [kg]="as" [ae]="as" [ad]="eu" [gr]="eu" [ki]="oc" [nr]="oc" [eg]="af" [kh]="as" [ro]="eu" [ai]="na" [np]="as" [ee]="eu" [us]="na" [ec]="sa" [gy]="sa" [ao]="af" [km]="af" [am]="as" [ye]="as" [nu]="oc" [kn]="na" [al]="eu" [si]="eu" [fr]="eu" [bf]="af" [mw]="af" [cy]="eu" [vc]="na" [mv]="as" [bg]="eu" [pr]="na" [sk]="eu" [bd]="as" [mu]="af" [ps]="as" [va]="eu" [cz]="eu" [be]="eu" [mt]="eu" [zm]="af" [ms]="na" [bb]="na" [sm]="eu" [pt]="eu" [io]="as" [vg]="na" [sl]="af" [mr]="af" [la]="as" [in]="as" [ws]="oc" [mq]="na" [im]="eu" [lb]="as" [tz]="af" [so]="af" [mp]="oc" [ve]="sa" [lc]="na" [ba]="eu" [sn]="af" [pw]="oc" [il]="as" [tt]="na" [bn]="as" [sa]="as" [bo]="sa" [py]="sa" [bl]="na" [tv]="oc" [sc]="af" [vi]="na" [cr]="na" [bm]="na" [sb]="oc" [tw]="as" [cu]="na" [se]="eu" [bj]="af" [vn]="as" [li]="eu" [mz]="af" [sd]="af" [cw]="na" [ie]="eu" [sg]="as" [jp]="as" [my]="as" [tr]="as" [bh]="as" [mx]="na" [cv]="af" [id]="as" [lk]="as" [za]="af" [bi]="af" [ci]="af" [tl]="oc" [mg]="af" [lt]="eu" [sy]="as" [sx]="na" [pa]="na" [mf]="na" [lu]="eu" [ch]="eu" [tm]="as" [bw]="af" [jo]="as" [me]="eu" [tn]="af" [ck]="oc" [bt]="as" [lv]="eu" [wf]="oc" [to]="oc" [jm]="na" [sz]="af" [md]="eu" [br]="sa" [mc]="eu" [cm]="af" [th]="as" [pe]="sa" [cl]="sa" [bs]="na" [pf]="oc" [co]="sa" [ma]="af" [lr]="af" [tj]="as" [bq]="na" [tk]="oc" [vu]="oc" [pg]="oc" [cn]="as" [ls]="af" [ca]="na" [is]="eu" [td]="af" [fj]="oc" [mo]="as" [ph]="as" [mn]="as" [zw]="af" [ir]="as" [ss]="af" [mm]="as" [iq]="as" [sr]="sa" [je]="eu" [ml]="af" [tg]="af" [pk]="as" [fi]="eu" [bz]="na" [pl]="eu" [mk]="eu" [pm]="na" [fo]="eu" [st]="af" [ly]="af" [cd]="af" [cg]="af" [sv]="na" [tc]="na" [it]="eu" [fm]="oc" [mh]="oc" [by]="eu" [cf]="af" [xk]="eu" [cx]="as" )'
 declare -A IP2LOCATION_COUNTRIES=()
 declare -A IP2LOCATION_CONTINENTS=()
 ip2location_country() {
@@ -3779,14 +3991,180 @@ ip2location_country() {
 		$MV_CMD "${x}" "${tmp}"
 		$TOUCH_CMD -r "${BASE_DIR}/${ipset}.source" "${tmp}"
 
-		finalize "${i}" "${tmp}" "${ipset}.source" "${ipset}/${i}.netset" "${mins}" "${history_mins}" "${ipv}" "${limit}" "${hash}" "${url}" "geolocation" "${info2}" "IP2Location.com" "http://lite.ip2location.com/database-ip-country" \
+		finalize "${i}" \
+			"${tmp}" \
+			"${ipset}.source" \
+			"${ipset}/${i}.netset" \
+			"${mins}" \
+			"${history_mins}" \
+			"${ipv}" \
+			"${limit}" \
+			"${hash}" \
+			"${url}" \
+			"geolocation" \
+			"${info2}" \
+			"IP2Location.com" \
+			"http://lite.ip2location.com/database-ip-country" \
 			service "geolocation"
+
+		[ -f "${BASE_DIR}/${i}.setinfo" ] && $MV_CMD -f "${BASE_DIR}/${i}.setinfo" "${BASE_DIR}/${ipset}/${i}.setinfo"
+
 	done
 
 	if [ -d .git ]
 	then
 		# generate a setinfo for the home page
 		echo >"${BASE_DIR}/${ipset}.setinfo" "[${ipset}](${GITHUB_SETINFO}ip2location_country)|[IP2Location.com](http://lite.ip2location.com/database-ip-country) geolocation database|ipv4 hash:net|All the world|updated every `mins_to_text ${mins}` from [this link](${url})"
+	fi
+
+	# remove the temporary dir
+	cd "${RUN_DIR}"
+	$RM_CMD -rf ${ipset}.tmp
+
+	return 0
+}
+
+declare -A IPIP_COUNTRY_NAMES='([eu]="European Union" [ap]="African Regional Industrial Property Organization" [as]="American Samoa" [ge]="Georgia" [ar]="Argentina" [gd]="Grenada" [dm]="Dominica" [kp]="North Korea" [rw]="Rwanda" [gg]="Guernsey" [qa]="Qatar" [ni]="Nicaragua" [do]="Dominican Republic" [gf]="French Guiana" [ru]="Russia" [kr]="Republic of Korea" [aw]="Aruba" [ga]="Gabon" [rs]="Serbia" [no]="Norway" [nl]="Netherlands" [au]="Australia" [kw]="Kuwait" [dj]="Djibouti" [at]="Austria" [gb]="United Kingdom" [dk]="Denmark" [ky]="Cayman Islands" [gm]="Gambia" [ug]="Uganda" [gl]="Greenland" [de]="Germany" [nc]="New Caledonia" [az]="Azerbaijan" [hr]="Croatia" [na]="Namibia" [gn]="Guinea" [kz]="Kazakhstan" [et]="Ethiopia" [ht]="Haiti" [es]="Spain" [gi]="Gibraltar" [nf]="Norfolk Island" [ng]="Nigeria" [gh]="Ghana" [hu]="Hungary" [er]="Eritrea" [ua]="Ukraine" [ne]="Niger" [yt]="Mayotte" [gu]="Guam" [nz]="New Zealand" [om]="Oman" [gt]="Guatemala" [gw]="Guinea-Bissau" [hk]="Hong Kong" [re]="Réunion" [ag]="Antigua and Barbuda" [gq]="Equatorial Guinea" [ke]="Kenya" [gp]="Guadeloupe" [uz]="Uzbekistan" [af]="Afghanistan" [hn]="Honduras" [uy]="Uruguay" [dz]="Algeria" [kg]="Kyrgyzstan" [ae]="United Arab Emirates" [ad]="Andorra" [gr]="Greece" [ki]="Kiribati" [nr]="Nauru" [eg]="Egypt" [kh]="Cambodia" [ro]="Romania" [ai]="Anguilla" [np]="Nepal" [ee]="Estonia" [us]="United States" [ec]="Ecuador" [gy]="Guyana" [ao]="Angola" [km]="Comoros" [am]="Armenia" [ye]="Yemen" [nu]="Niue" [kn]="Saint Kitts and Nevis" [al]="Albania" [si]="Slovenia" [fr]="France" [bf]="Burkina Faso" [mw]="Malawi" [cy]="Cyprus" [vc]="Saint Vincent and the Grenadines" [mv]="Maldives" [bg]="Bulgaria" [pr]="Puerto Rico" [sk]="Slovak Republic" [bd]="Bangladesh" [mu]="Mauritius" [ps]="Palestine" [va]="Vatican City" [cz]="Czech Republic" [be]="Belgium" [mt]="Malta" [zm]="Zambia" [ms]="Montserrat" [bb]="Barbados" [sm]="San Marino" [pt]="Portugal" [io]="British Indian Ocean Territory" [vg]="British Virgin Islands" [sl]="Sierra Leone" [mr]="Mauritania" [la]="Laos" [in]="India" [ws]="Samoa" [mq]="Martinique" [im]="Isle of Man" [lb]="Lebanon" [tz]="Tanzania" [so]="Somalia" [mp]="Northern Mariana Islands" [ve]="Venezuela" [lc]="Saint Lucia" [ba]="Bosnia and Herzegovina" [sn]="Senegal" [pw]="Palau" [il]="Israel" [tt]="Trinidad and Tobago" [bn]="Brunei" [sa]="Saudi Arabia" [bo]="Bolivia" [py]="Paraguay" [bl]="Saint-Barthélemy" [tv]="Tuvalu" [sc]="Seychelles" [vi]="U.S. Virgin Islands" [cr]="Costa Rica" [bm]="Bermuda" [sb]="Solomon Islands" [tw]="Taiwan" [cu]="Cuba" [se]="Sweden" [bj]="Benin" [vn]="Vietnam" [li]="Liechtenstein" [mz]="Mozambique" [sd]="Sudan" [cw]="Curaçao" [ie]="Ireland" [sg]="Singapore" [jp]="Japan" [my]="Malaysia" [tr]="Turkey" [bh]="Bahrain" [mx]="Mexico" [cv]="Cape Verde" [id]="Indonesia" [lk]="Sri Lanka" [za]="South Africa" [bi]="Burundi" [ci]="Ivory Coast" [tl]="East Timor" [mg]="Madagascar" [lt]="Republic of Lithuania" [sy]="Syria" [sx]="Sint Maarten" [pa]="Panama" [mf]="Saint Martin" [lu]="Luxembourg" [ch]="Switzerland" [tm]="Turkmenistan" [bw]="Botswana" [jo]="Hashemite Kingdom of Jordan" [me]="Montenegro" [tn]="Tunisia" [ck]="Cook Islands" [bt]="Bhutan" [lv]="Latvia" [wf]="Wallis and Futuna" [to]="Tonga" [jm]="Jamaica" [sz]="Swaziland" [md]="Republic of Moldova" [br]="Brazil" [mc]="Monaco" [cm]="Cameroon" [th]="Thailand" [pe]="Peru" [cl]="Chile" [bs]="Bahamas" [pf]="French Polynesia" [co]="Colombia" [ma]="Morocco" [lr]="Liberia" [tj]="Tajikistan" [bq]="Bonaire, Sint Eustatius, and Saba" [tk]="Tokelau" [vu]="Vanuatu" [pg]="Papua New Guinea" [cn]="China" [ls]="Lesotho" [ca]="Canada" [is]="Iceland" [td]="Chad" [fj]="Fiji" [mo]="Macao" [ph]="Philippines" [mn]="Mongolia" [zw]="Zimbabwe" [ir]="Iran" [ss]="South Sudan" [mm]="Myanmar (Burma)" [iq]="Iraq" [sr]="Suriname" [je]="Jersey" [ml]="Mali" [tg]="Togo" [pk]="Pakistan" [fi]="Finland" [bz]="Belize" [pl]="Poland" [mk]="F.Y.R.O.M." [pm]="Saint Pierre and Miquelon" [fo]="Faroe Islands" [st]="São Tomé and Príncipe" [ly]="Libya" [cd]="Congo" [cg]="Republic of the Congo" [sv]="El Salvador" [tc]="Turks and Caicos Islands" [it]="Italy" [fm]="Federated States of Micronesia" [mh]="Marshall Islands" [by]="Belarus" [cf]="Central African Republic" [cx]="Christmas Island" [xk]="Kosovo" [aq]="Antarctic")'
+declare -A IPIP_COUNTRY_CONTINENTS='([aq]="aq" [gs]="eu" [um]="na" [fk]="sa" [ax]="eu" [as]="oc" [ge]="as" [ar]="sa" [gd]="na" [dm]="na" [kp]="as" [rw]="af" [gg]="eu" [qa]="as" [ni]="na" [do]="na" [gf]="sa" [ru]="eu" [kr]="as" [aw]="na" [ga]="af" [rs]="eu" [no]="eu" [nl]="eu" [au]="oc" [kw]="as" [dj]="af" [at]="eu" [gb]="eu" [dk]="eu" [ky]="na" [gm]="af" [ug]="af" [gl]="na" [de]="eu" [nc]="oc" [az]="as" [hr]="eu" [na]="af" [gn]="af" [kz]="as" [et]="af" [ht]="na" [es]="eu" [gi]="eu" [nf]="oc" [ng]="af" [gh]="af" [hu]="eu" [er]="af" [ua]="eu" [ne]="af" [yt]="af" [gu]="oc" [nz]="oc" [om]="as" [gt]="na" [gw]="af" [hk]="as" [re]="af" [ag]="na" [gq]="af" [ke]="af" [gp]="na" [uz]="as" [af]="as" [hn]="na" [uy]="sa" [dz]="af" [kg]="as" [ae]="as" [ad]="eu" [gr]="eu" [ki]="oc" [nr]="oc" [eg]="af" [kh]="as" [ro]="eu" [ai]="na" [np]="as" [ee]="eu" [us]="na" [ec]="sa" [gy]="sa" [ao]="af" [km]="af" [am]="as" [ye]="as" [nu]="oc" [kn]="na" [al]="eu" [si]="eu" [fr]="eu" [bf]="af" [mw]="af" [cy]="eu" [vc]="na" [mv]="as" [bg]="eu" [pr]="na" [sk]="eu" [bd]="as" [mu]="af" [ps]="as" [va]="eu" [cz]="eu" [be]="eu" [mt]="eu" [zm]="af" [ms]="na" [bb]="na" [sm]="eu" [pt]="eu" [io]="as" [vg]="na" [sl]="af" [mr]="af" [la]="as" [in]="as" [ws]="oc" [mq]="na" [im]="eu" [lb]="as" [tz]="af" [so]="af" [mp]="oc" [ve]="sa" [lc]="na" [ba]="eu" [sn]="af" [pw]="oc" [il]="as" [tt]="na" [bn]="as" [sa]="as" [bo]="sa" [py]="sa" [bl]="na" [tv]="oc" [sc]="af" [vi]="na" [cr]="na" [bm]="na" [sb]="oc" [tw]="as" [cu]="na" [se]="eu" [bj]="af" [vn]="as" [li]="eu" [mz]="af" [sd]="af" [cw]="na" [ie]="eu" [sg]="as" [jp]="as" [my]="as" [tr]="as" [bh]="as" [mx]="na" [cv]="af" [id]="as" [lk]="as" [za]="af" [bi]="af" [ci]="af" [tl]="oc" [mg]="af" [lt]="eu" [sy]="as" [sx]="na" [pa]="na" [mf]="na" [lu]="eu" [ch]="eu" [tm]="as" [bw]="af" [jo]="as" [me]="eu" [tn]="af" [ck]="oc" [bt]="as" [lv]="eu" [wf]="oc" [to]="oc" [jm]="na" [sz]="af" [md]="eu" [br]="sa" [mc]="eu" [cm]="af" [th]="as" [pe]="sa" [cl]="sa" [bs]="na" [pf]="oc" [co]="sa" [ma]="af" [lr]="af" [tj]="as" [bq]="na" [tk]="oc" [vu]="oc" [pg]="oc" [cn]="as" [ls]="af" [ca]="na" [is]="eu" [td]="af" [fj]="oc" [mo]="as" [ph]="as" [mn]="as" [zw]="af" [ir]="as" [ss]="af" [mm]="as" [iq]="as" [sr]="sa" [je]="eu" [ml]="af" [tg]="af" [pk]="as" [fi]="eu" [bz]="na" [pl]="eu" [mk]="eu" [pm]="na" [fo]="eu" [st]="af" [ly]="af" [cd]="af" [cg]="af" [sv]="na" [tc]="na" [it]="eu" [fm]="oc" [mh]="oc" [by]="eu" [cf]="af" [xk]="eu" [cx]="as" [eu]="eu" )'
+declare -A IPIP_COUNTRIES=()
+declare -A IPIP_CONTINENTS=()
+ipip_country() {
+	if [ -z "${UNZIP_CMD}" ]
+	then
+		ipset_error "ipip_country" "Command 'unzip' is not installed."
+		return 1
+	fi
+
+	cd "${RUN_DIR}" || return 1
+
+	local ipset="ipip_country" limit="" hash="net" ipv="ipv4" \
+		mins=$[24 * 60 * 1] history_mins=0 \
+		url="https://cdn.ipip.net/17mon/country.zip" \
+		info="[ipip.net](http://ipip.net)" \
+		ret=
+
+	ipset_shall_be_run "${ipset}"
+	case "$?" in
+		0)	;;
+
+		1)	[ -d "${BASE_DIR}/.git" ] && echo >"${BASE_DIR}/${ipset}.setinfo" "${ipset}|${info}|${ipv} hash:${hash}|disabled|`if [ ! -z "${url}" ]; then echo "updated every $(mins_to_text ${mins}) from [this link](${url})"; fi`"
+			return 1
+			;;
+
+		*)	return 1
+			;;
+	esac
+
+	# download it
+	download_manager "${ipset}" "${mins}" "${url}"
+	ret=$?
+	if [ $ret -eq ${DOWNLOAD_FAILED} -o $ret -eq ${DOWNLOAD_NOT_UPDATED} ]
+		then
+		[ ! -s "${BASE_DIR}/${ipset}.source" ] && return 1
+		[ -d "${BASE_DIR}/${ipset}" -a ${REPROCESS_ALL} -eq 0 ] && return 1
+	fi
+
+	# create a temp dir
+	[ -d "${ipset}.tmp" ] && $RM_CMD -rf "${ipset}.tmp"
+	$MKDIR_CMD "${ipset}.tmp" || return 1
+	cd "${ipset}.tmp" || return 1
+
+	# extract it - in a subshell to do it in the tmp dir
+	$UNZIP_CMD -x "${BASE_DIR}/${ipset}.source"
+	local file="country.txt"
+
+	if [ ! -f "${file}" ]
+		then
+		ipset_error "${ipset}" "failed to find file '${file}' in downloaded archive"
+		return 1
+	fi
+
+	# create the final dir
+	if [ ! -d "${BASE_DIR}/${ipset}" ]
+	then
+		$MKDIR_CMD "${BASE_DIR}/${ipset}" || return 1
+	fi
+
+	# get the old version of README-EDIT.md, if any
+	if [ -d "${BASE_DIR}/.git" -a ! -f "${BASE_DIR}/${ipset}/README-EDIT.md" ]
+		then
+		$GIT_CMD -C "${BASE_DIR}" checkout ${ipset}/README-EDIT.md >/dev/null 2>&1
+		if [ ! -f ${ipset}/README-EDIT.md ]
+			then
+			$TOUCH_CMD ${ipset}/README-EDIT.md
+			git_add_if_not_already_added ${ipset}/README-EDIT.md
+		fi
+	fi
+
+	# find all the countries in the file
+	ipset_info "${ipset}" "finding included countries..."
+	$CAT_CMD "${file}" |\
+		$CUT_CMD -f 2 |\
+		$SORT_CMD -u |\
+		trim >countries
+
+	local x= code= name=
+	while read x
+	do
+		code="${x,,}"
+		name="${IPIP_COUNTRY_NAMES[${code}]}"
+		[ -z "${name}" ] && name="${code}"
+
+		ipset_verbose "${ipset}" "extracting country '${x}' (code='${code}' name='${name}')..."
+		$CAT_CMD "${file}" 			|\
+			$GREP_CMD -E "[[:space:]]+${x}[[:space:]]*$" |\
+			$CUT_CMD -f 1 			|\
+			${IPRANGE_CMD} 			|\
+			filter_invalid4 >"ipip_country_${code}.source.tmp"
+
+		if [ ! -z "${IPIP_COUNTRY_CONTINENTS[${code}]}" ]
+			then
+			[ ! -f "id_continent_${IPIP_COUNTRY_CONTINENTS[${code}]}.source.tmp.info" ] && printf "%s" "Continent ${IPIP_COUNTRY_CONTINENTS[${code}]}, with countries: " >"id_continent_${IPIP_COUNTRY_CONTINENTS[${code}]}.source.tmp.info"
+			printf "%s" "${IPIP_COUNTRY_NAMES[${code}]} (${code^^}), " >>"ipip_continent_${IPIP_COUNTRY_CONTINENTS[${code}]}.source.tmp.info"
+			$CAT_CMD "ipip_country_${code}.source.tmp" >>"ipip_continent_${IPIP_COUNTRY_CONTINENTS[${code}]}.source.tmp"
+			IPIP_CONTINENTS[${IPIP_COUNTRY_CONTINENTS[${code}]}]="1"
+		else
+			ipset_warning "${ipset}" "I don't know the continent of country '${x}'' (code='${code}')."
+		fi
+
+		printf "%s" "${IPIP_COUNTRY_NAMES[${code}]} (${code^^})" >"ipip_country_${code}.source.tmp.info"
+	done <countries
+
+	ipset_info "${ipset}" "aggregating country and continent netsets..."
+	local i info tmp
+	for x in *.source.tmp
+	do
+		i=${x/.source.tmp/}
+		tmp="${i}.source"
+		local info2="$($CAT_CMD "${x}.info") -- ${info}"
+
+		$MV_CMD "${x}" "${tmp}"
+		$TOUCH_CMD -r "${BASE_DIR}/${ipset}.source" "${tmp}"
+
+		finalize "${i}" \
+			"${tmp}" \
+			"${ipset}.source" \
+			"${ipset}/${i}.netset" \
+			"${mins}" \
+			"${history_mins}" \
+			"${ipv}" \
+			"${limit}" \
+			"${hash}" \
+			"${url}" \
+			"geolocation" \
+			"${info2}" \
+			"ipip.net" \
+			"http://ipip.net" \
+			service "geolocation"
+
+		[ -f "${BASE_DIR}/${i}.setinfo" ] && $MV_CMD -f "${BASE_DIR}/${i}.setinfo" "${BASE_DIR}/${ipset}/${i}.setinfo"
+
+	done
+
+	if [ -d .git ]
+	then
+		# generate a setinfo for the home page
+		echo >"${BASE_DIR}/${ipset}.setinfo" "[${ipset}](${GITHUB_SETINFO}ipip_country)|[ipip.net](http://ipip.net) geolocation database|ipv4 hash:net|All the world|updated every `mins_to_text ${mins}` from [this link](${url})"
 	fi
 
 	# remove the temporary dir
@@ -4000,109 +4378,130 @@ ip2location_country
 
 
 # -----------------------------------------------------------------------------
+# ipip.net
+
+ipip_country
+
+
+# -----------------------------------------------------------------------------
 # atlas.arbor.net
 
-atlas_parser() { ${EGREP_CMD} "^${IP4_MATCH}, \"" | ${CUT_CMD} -d ',' -f 1; }
+#atlas_parser() { ${EGREP_CMD} "^${IP4_MATCH}, \"" | ${CUT_CMD} -d ',' -f 1; }
 
-update atlas_attacks $[24 * 60] "$[48*60] $[7*24*60] $[30*24*60]" ipv4 ip \
-	"https://atlas.arbor.net/summary/attacks.csv" \
-	atlas_parser \
-	"attacks" "[ATLAS Attacks](https://atlas.arbor.net/summary/attacks) - ATLAS uses lightweight honeypot sensors to detect and fingerprint the attacks launched by malicious sources on the Internet. In most cases the attacker is trying to take control of the target via a published exploit for a known vulnerability. A variety of exploit tools exist and are usually written specifically for each attack vector. Exploit attempts and attacks are most often launched from bots (hosts under an attacker's control), which will automatically try to exploit any possible host on the Internet. Attack origins are usually not spoofed, although the source host may be compromised or infected with malware." \
-	"Arbor Networks" "https://atlas.arbor.net/"
+delete_ipset atlas_attacks
+#update atlas_attacks $[24 * 60] "$[48*60] $[7*24*60] $[30*24*60]" ipv4 ip \
+#	"https://atlas.arbor.net/summary/attacks.csv" \
+#	atlas_parser \
+#	"attacks" "[ATLAS Attacks](https://atlas.arbor.net/summary/attacks) - ATLAS uses lightweight honeypot sensors to detect and fingerprint the attacks launched by malicious sources on the Internet. In most cases the attacker is trying to take control of the target via a published exploit for a known vulnerability. A variety of exploit tools exist and are usually written specifically for each attack vector. Exploit attempts and attacks are most often launched from bots (hosts under an attacker's control), which will automatically try to exploit any possible host on the Internet. Attack origins are usually not spoofed, although the source host may be compromised or infected with malware." \
+#	"Arbor Networks" "https://atlas.arbor.net/"
 
-update atlas_botnets $[24 * 60] "$[48*60] $[7*24*60] $[30*24*60]" ipv4 ip \
-	"https://atlas.arbor.net/summary/botnets.csv" \
-	atlas_parser \
-	"attacks" "[ATLAS Botnets](https://atlas.arbor.net/summary/botnets) - Botnets are collections of compromised hosts that attackers remotely control for their own nefarious purposes. Once installed and running, a malicious bot will attempt to connect to a remote server to receive instructions on what actions to take. The most common command and control (C&C) protocol used for this is Internet Relay Chat (IRC). While a legitimate protocol for online chat, IRC is often used by attackers due to the relative simplicity of the protocol along with the ready availability of bot software written to use it. After connecting, a bot-controlled host can be controlled by an attacker and commanded to conduct malicious actions such as sending spam, scanning the Internet for other potentially controllable hosts, or launching DoS attacks. ATLAS maintains a real-time database of malicious botnet command and control servers that is continuously updated. This information comes from malware analysis, botnet infiltration, and other sources of data." \
-	"Arbor Networks" "https://atlas.arbor.net/"
+delete_ipset atlas_botnets
+#update atlas_botnets $[24 * 60] "$[48*60] $[7*24*60] $[30*24*60]" ipv4 ip \
+#	"https://atlas.arbor.net/summary/botnets.csv" \
+#	atlas_parser \
+#	"attacks" "[ATLAS Botnets](https://atlas.arbor.net/summary/botnets) - Botnets are collections of compromised hosts that attackers remotely control for their own nefarious purposes. Once installed and running, a malicious bot will attempt to connect to a remote server to receive instructions on what actions to take. The most common command and control (C&C) protocol used for this is Internet Relay Chat (IRC). While a legitimate protocol for online chat, IRC is often used by attackers due to the relative simplicity of the protocol along with the ready availability of bot software written to use it. After connecting, a bot-controlled host can be controlled by an attacker and commanded to conduct malicious actions such as sending spam, scanning the Internet for other potentially controllable hosts, or launching DoS attacks. ATLAS maintains a real-time database of malicious botnet command and control servers that is continuously updated. This information comes from malware analysis, botnet infiltration, and other sources of data." \
+#	"Arbor Networks" "https://atlas.arbor.net/"
 
-update atlas_fastflux $[24 * 60] "$[48*60] $[7*24*60] $[30*24*60]" ipv4 ip \
-	"https://atlas.arbor.net/summary/fastflux.csv" \
-	atlas_parser \
-	"attacks" "[ATLAS Fastflux](https://atlas.arbor.net/summary/fastflux) - Fast flux hosting is a technique where the nodes in a botnet are used as the endpoints in a website hosting scheme. The DNS records change frequently, often every few minutes, to point to new bots. The actual nodes themselves simply proxy the request back to the central hosting location. This gives the botnet a robust hosting infrastructure. Many different kinds of botnets use fastflux DNS techniques, for malware hosting, for illegal content hosting, for phishing site hosting, and other such activities. These hosts are likely to be infected with some form of malware." \
-	"Arbor Networks" "https://atlas.arbor.net/"
+delete_ipset atlas_fastflux
+#update atlas_fastflux $[24 * 60] "$[48*60] $[7*24*60] $[30*24*60]" ipv4 ip \
+#	"https://atlas.arbor.net/summary/fastflux.csv" \
+#	atlas_parser \
+#	"attacks" "[ATLAS Fastflux](https://atlas.arbor.net/summary/fastflux) - Fast flux hosting is a technique where the nodes in a botnet are used as the endpoints in a website hosting scheme. The DNS records change frequently, often every few minutes, to point to new bots. The actual nodes themselves simply proxy the request back to the central hosting location. This gives the botnet a robust hosting infrastructure. Many different kinds of botnets use fastflux DNS techniques, for malware hosting, for illegal content hosting, for phishing site hosting, and other such activities. These hosts are likely to be infected with some form of malware." \
+#	"Arbor Networks" "https://atlas.arbor.net/"
 
-update atlas_phishing $[24 * 60] "$[48*60] $[7*24*60] $[30*24*60]" ipv4 ip \
-	"https://atlas.arbor.net/summary/phishing.csv" \
-	atlas_parser \
-	"attacks" "[ATLAS Phishing](https://atlas.arbor.net/summary/fastflux) - Phishing servers host content that is designed to socially engineer unsuspecting users into surrendering private information used for identity theft. These servers are installed on compromised web servers or botnets, at times. Phishing Web sites mimic legitimate Web sites, often of a financial institution, in order to steal logins, passwords, and personal information. Attackers trick users into using the fake Web site by sending the intended victim an e-mail claiming to be a legitimate institution requesting the information for valid reasons, such as account verification. They may then use the stolen credentials to withdraw large amounts of money from the victim's account or commit other fraudulent acts. Most targeted brands are usually in the financial sector, including banks and online commerce sites." \
-	"Arbor Networks" "https://atlas.arbor.net/"
+delete_ipset atlas_phishing
+#update atlas_phishing $[24 * 60] "$[48*60] $[7*24*60] $[30*24*60]" ipv4 ip \
+#	"https://atlas.arbor.net/summary/phishing.csv" \
+#	atlas_parser \
+#	"attacks" "[ATLAS Phishing](https://atlas.arbor.net/summary/fastflux) - Phishing servers host content that is designed to socially engineer unsuspecting users into surrendering private information used for identity theft. These servers are installed on compromised web servers or botnets, at times. Phishing Web sites mimic legitimate Web sites, often of a financial institution, in order to steal logins, passwords, and personal information. Attackers trick users into using the fake Web site by sending the intended victim an e-mail claiming to be a legitimate institution requesting the information for valid reasons, such as account verification. They may then use the stolen credentials to withdraw large amounts of money from the victim's account or commit other fraudulent acts. Most targeted brands are usually in the financial sector, including banks and online commerce sites." \
+#	"Arbor Networks" "https://atlas.arbor.net/"
 
-update atlas_scans $[24 * 60] "$[48*60] $[7*24*60] $[30*24*60]" ipv4 ip \
-	"https://atlas.arbor.net/summary/scans.csv" \
-	atlas_parser \
-	"attacks" "[ATLAS Scans](https://atlas.arbor.net/summary/scans) - Host scanning is a process whereby automated network sweeps are initiated in search of hosts running a particular service. This may be indicative of either legitimate host scanners (including network management systems and authorized vulnerability scanners) or an attacker (or automated malicious code, such as a worm) trying to enumerate potential hosts for subsequent compromise. Scans are often the prelude to an attack, and services scanned by attackers usually indicate known vulnerabilities for those services. Types of port scans include connect() scans, SYN scans, stealth scans, bounce scans, XMAS and Null scans. All reveal to the attacker which services on what hosts are listening for connections. Scans may be launched from compromised hosts, and their sources may be forged." \
-	"Arbor Networks" "https://atlas.arbor.net/"
+delete_ipset atlas_scans
+#update atlas_scans $[24 * 60] "$[48*60] $[7*24*60] $[30*24*60]" ipv4 ip \
+#	"https://atlas.arbor.net/summary/scans.csv" \
+#	atlas_parser \
+#	"attacks" "[ATLAS Scans](https://atlas.arbor.net/summary/scans) - Host scanning is a process whereby automated network sweeps are initiated in search of hosts running a particular service. This may be indicative of either legitimate host scanners (including network management systems and authorized vulnerability scanners) or an attacker (or automated malicious code, such as a worm) trying to enumerate potential hosts for subsequent compromise. Scans are often the prelude to an attack, and services scanned by attackers usually indicate known vulnerabilities for those services. Types of port scans include connect() scans, SYN scans, stealth scans, bounce scans, XMAS and Null scans. All reveal to the attacker which services on what hosts are listening for connections. Scans may be launched from compromised hosts, and their sources may be forged." \
+#	"Arbor Networks" "https://atlas.arbor.net/"
 
 
 # -----------------------------------------------------------------------------
 # www.openbl.org
-
-update openbl $[4*60] 0 ipv4 ip \
-	"http://www.openbl.org/lists/base.txt" \
-	remove_comments \
-	"attacks" \
-	"[OpenBL.org](http://www.openbl.org/) default blacklist (currently it is the same with 90 days). OpenBL.org is detecting, logging and reporting various types of internet abuse. Currently they monitor ports 21 (FTP), 22 (SSH), 23 (TELNET), 25 (SMTP), 110 (POP3), 143 (IMAP), 587 (Submission), 993 (IMAPS) and 995 (POP3S) for bruteforce login attacks as well as scans on ports 80 (HTTP) and 443 (HTTPS) for vulnerable installations of phpMyAdmin and other web applications" \
-	"OpenBL.org" "http://www.openbl.org/" \
-	dont_enable_with_all
-
-update openbl_1d $[1*60] 0 ipv4 ip \
-	"http://www.openbl.org/lists/base_1days.txt" \
-	remove_comments \
-	"attacks" \
-	"[OpenBL.org](http://www.openbl.org/) last 24 hours IPs.  OpenBL.org is detecting, logging and reporting various types of internet abuse. Currently they monitor ports 21 (FTP), 22 (SSH), 23 (TELNET), 25 (SMTP), 110 (POP3), 143 (IMAP), 587 (Submission), 993 (IMAPS) and 995 (POP3S) for bruteforce login attacks as well as scans on ports 80 (HTTP) and 443 (HTTPS) for vulnerable installations of phpMyAdmin and other web applications." \
-	"OpenBL.org" "http://www.openbl.org/"
-
-update openbl_7d $[4*60] 0 ipv4 ip \
-	"http://www.openbl.org/lists/base_7days.txt" \
-	remove_comments \
-	"attacks" \
-	"[OpenBL.org](http://www.openbl.org/) last 7 days IPs.  OpenBL.org is detecting, logging and reporting various types of internet abuse. Currently they monitor ports 21 (FTP), 22 (SSH), 23 (TELNET), 25 (SMTP), 110 (POP3), 143 (IMAP), 587 (Submission), 993 (IMAPS) and 995 (POP3S) for bruteforce login attacks as well as scans on ports 80 (HTTP) and 443 (HTTPS) for vulnerable installations of phpMyAdmin and other web applications." \
-	"OpenBL.org" "http://www.openbl.org/"
-
-update openbl_30d $[4*60] 0 ipv4 ip \
-	"http://www.openbl.org/lists/base_30days.txt" \
-	remove_comments \
-	"attacks" \
-	"[OpenBL.org](http://www.openbl.org/) last 30 days IPs.  OpenBL.org is detecting, logging and reporting various types of internet abuse. Currently they monitor ports 21 (FTP), 22 (SSH), 23 (TELNET), 25 (SMTP), 110 (POP3), 143 (IMAP), 587 (Submission), 993 (IMAPS) and 995 (POP3S) for bruteforce login attacks as well as scans on ports 80 (HTTP) and 443 (HTTPS) for vulnerable installations of phpMyAdmin and other web applications." \
-	"OpenBL.org" "http://www.openbl.org/"
-
-update openbl_60d $[4*60] 0 ipv4 ip \
-	"http://www.openbl.org/lists/base_60days.txt" \
-	remove_comments \
-	"attacks" \
-	"[OpenBL.org](http://www.openbl.org/) last 60 days IPs.  OpenBL.org is detecting, logging and reporting various types of internet abuse. Currently they monitor ports 21 (FTP), 22 (SSH), 23 (TELNET), 25 (SMTP), 110 (POP3), 143 (IMAP), 587 (Submission), 993 (IMAPS) and 995 (POP3S) for bruteforce login attacks as well as scans on ports 80 (HTTP) and 443 (HTTPS) for vulnerable installations of phpMyAdmin and other web applications." \
-	"OpenBL.org" "http://www.openbl.org/"
-
-update openbl_90d $[4*60] 0 ipv4 ip \
-	"http://www.openbl.org/lists/base_90days.txt" \
-	remove_comments \
-	"attacks" \
-	"[OpenBL.org](http://www.openbl.org/) last 90 days IPs.  OpenBL.org is detecting, logging and reporting various types of internet abuse. Currently they monitor ports 21 (FTP), 22 (SSH), 23 (TELNET), 25 (SMTP), 110 (POP3), 143 (IMAP), 587 (Submission), 993 (IMAPS) and 995 (POP3S) for bruteforce login attacks as well as scans on ports 80 (HTTP) and 443 (HTTPS) for vulnerable installations of phpMyAdmin and other web applications." \
-	"OpenBL.org" "http://www.openbl.org/"
-
-update openbl_180d $[4*60] 0 ipv4 ip \
-	"http://www.openbl.org/lists/base_180days.txt" \
-	remove_comments \
-	"attacks" \
-	"[OpenBL.org](http://www.openbl.org/) last 180 days IPs.  OpenBL.org is detecting, logging and reporting various types of internet abuse. Currently they monitor ports 21 (FTP), 22 (SSH), 23 (TELNET), 25 (SMTP), 110 (POP3), 143 (IMAP), 587 (Submission), 993 (IMAPS) and 995 (POP3S) for bruteforce login attacks as well as scans on ports 80 (HTTP) and 443 (HTTPS) for vulnerable installations of phpMyAdmin and other web applications." \
-	"OpenBL.org" "http://www.openbl.org/"
-
-update openbl_360d $[4*60] 0 ipv4 ip \
-	"http://www.openbl.org/lists/base_360days.txt" \
-	remove_comments \
-	"attacks" \
-	"[OpenBL.org](http://www.openbl.org/) last 360 days IPs.  OpenBL.org is detecting, logging and reporting various types of internet abuse. Currently they monitor ports 21 (FTP), 22 (SSH), 23 (TELNET), 25 (SMTP), 110 (POP3), 143 (IMAP), 587 (Submission), 993 (IMAPS) and 995 (POP3S) for bruteforce login attacks as well as scans on ports 80 (HTTP) and 443 (HTTPS) for vulnerable installations of phpMyAdmin and other web applications." \
-	"OpenBL.org" "http://www.openbl.org/"
-
-update openbl_all $[4*60] 0 ipv4 ip \
-	"http://www.openbl.org/lists/base_all.txt" \
-	remove_comments \
-	"attacks" \
-	"[OpenBL.org](http://www.openbl.org/) last all IPs.  OpenBL.org is detecting, logging and reporting various types of internet abuse. Currently they monitor ports 21 (FTP), 22 (SSH), 23 (TELNET), 25 (SMTP), 110 (POP3), 143 (IMAP), 587 (Submission), 993 (IMAPS) and 995 (POP3S) for bruteforce login attacks as well as scans on ports 80 (HTTP) and 443 (HTTPS) for vulnerable installations of phpMyAdmin and other web applications." \
-	"OpenBL.org" "http://www.openbl.org/"
-
-
+# Unfortunately, openbl does not exist any more.
+#
+delete_ipset openbl
+#update openbl $[4*60] 0 ipv4 ip \
+#	"http://www.openbl.org/lists/base.txt" \
+#	remove_comments \
+#	"attacks" \
+#	"[OpenBL.org](http://www.openbl.org/) default blacklist (currently it is the same with 90 days). OpenBL.org is detecting, logging and reporting various types of internet abuse. Currently they monitor ports 21 (FTP), 22 (SSH), 23 (TELNET), 25 (SMTP), 110 (POP3), 143 (IMAP), 587 (Submission), 993 (IMAPS) and 995 (POP3S) for bruteforce login attacks as well as scans on ports 80 (HTTP) and 443 (HTTPS) for vulnerable installations of phpMyAdmin and other web applications" \
+#	"OpenBL.org" "http://www.openbl.org/" \
+#	dont_enable_with_all
+#
+delete_ipset openbl_1d
+#update openbl_1d $[1*60] 0 ipv4 ip \
+#	"http://www.openbl.org/lists/base_1days.txt" \
+#	remove_comments \
+#	"attacks" \
+#	"[OpenBL.org](http://www.openbl.org/) last 24 hours IPs.  OpenBL.org is detecting, logging and reporting various types of internet abuse. Currently they monitor ports 21 (FTP), 22 (SSH), 23 (TELNET), 25 (SMTP), 110 (POP3), 143 (IMAP), 587 (Submission), 993 (IMAPS) and 995 (POP3S) for bruteforce login attacks as well as scans on ports 80 (HTTP) and 443 (HTTPS) for vulnerable installations of phpMyAdmin and other web applications." \
+#	"OpenBL.org" "http://www.openbl.org/"
+#
+delete_ipset openbl_7d
+#update openbl_7d $[4*60] 0 ipv4 ip \
+#	"http://www.openbl.org/lists/base_7days.txt" \
+#	remove_comments \
+#	"attacks" \
+#	"[OpenBL.org](http://www.openbl.org/) last 7 days IPs.  OpenBL.org is detecting, logging and reporting various types of internet abuse. Currently they monitor ports 21 (FTP), 22 (SSH), 23 (TELNET), 25 (SMTP), 110 (POP3), 143 (IMAP), 587 (Submission), 993 (IMAPS) and 995 (POP3S) for bruteforce login attacks as well as scans on ports 80 (HTTP) and 443 (HTTPS) for vulnerable installations of phpMyAdmin and other web applications." \
+#	"OpenBL.org" "http://www.openbl.org/"
+#
+delete_ipset openbl_30d
+#update openbl_30d $[4*60] 0 ipv4 ip \
+#	"http://www.openbl.org/lists/base_30days.txt" \
+#	remove_comments \
+#	"attacks" \
+#	"[OpenBL.org](http://www.openbl.org/) last 30 days IPs.  OpenBL.org is detecting, logging and reporting various types of internet abuse. Currently they monitor ports 21 (FTP), 22 (SSH), 23 (TELNET), 25 (SMTP), 110 (POP3), 143 (IMAP), 587 (Submission), 993 (IMAPS) and 995 (POP3S) for bruteforce login attacks as well as scans on ports 80 (HTTP) and 443 (HTTPS) for vulnerable installations of phpMyAdmin and other web applications." \
+#	"OpenBL.org" "http://www.openbl.org/"
+#
+delete_ipset openbl_60d
+#update openbl_60d $[4*60] 0 ipv4 ip \
+#	"http://www.openbl.org/lists/base_60days.txt" \
+#	remove_comments \
+#	"attacks" \
+#	"[OpenBL.org](http://www.openbl.org/) last 60 days IPs.  OpenBL.org is detecting, logging and reporting various types of internet abuse. Currently they monitor ports 21 (FTP), 22 (SSH), 23 (TELNET), 25 (SMTP), 110 (POP3), 143 (IMAP), 587 (Submission), 993 (IMAPS) and 995 (POP3S) for bruteforce login attacks as well as scans on ports 80 (HTTP) and 443 (HTTPS) for vulnerable installations of phpMyAdmin and other web applications." \
+#	"OpenBL.org" "http://www.openbl.org/"
+#
+delete_ipset openbl_90d
+#update openbl_90d $[4*60] 0 ipv4 ip \
+#	"http://www.openbl.org/lists/base_90days.txt" \
+#	remove_comments \
+#	"attacks" \
+#	"[OpenBL.org](http://www.openbl.org/) last 90 days IPs.  OpenBL.org is detecting, logging and reporting various types of internet abuse. Currently they monitor ports 21 (FTP), 22 (SSH), 23 (TELNET), 25 (SMTP), 110 (POP3), 143 (IMAP), 587 (Submission), 993 (IMAPS) and 995 (POP3S) for bruteforce login attacks as well as scans on ports 80 (HTTP) and 443 (HTTPS) for vulnerable installations of phpMyAdmin and other web applications." \
+#	"OpenBL.org" "http://www.openbl.org/"
+#
+delete_ipset openbl_180d
+#update openbl_180d $[4*60] 0 ipv4 ip \
+#	"http://www.openbl.org/lists/base_180days.txt" \
+#	remove_comments \
+#	"attacks" \
+#	"[OpenBL.org](http://www.openbl.org/) last 180 days IPs.  OpenBL.org is detecting, logging and reporting various types of internet abuse. Currently they monitor ports 21 (FTP), 22 (SSH), 23 (TELNET), 25 (SMTP), 110 (POP3), 143 (IMAP), 587 (Submission), 993 (IMAPS) and 995 (POP3S) for bruteforce login attacks as well as scans on ports 80 (HTTP) and 443 (HTTPS) for vulnerable installations of phpMyAdmin and other web applications." \
+#	"OpenBL.org" "http://www.openbl.org/"
+#
+delete_ipset openbl_360d
+#update openbl_360d $[4*60] 0 ipv4 ip \
+#	"http://www.openbl.org/lists/base_360days.txt" \
+#	remove_comments \
+#	"attacks" \
+#	"[OpenBL.org](http://www.openbl.org/) last 360 days IPs.  OpenBL.org is detecting, logging and reporting various types of internet abuse. Currently they monitor ports 21 (FTP), 22 (SSH), 23 (TELNET), 25 (SMTP), 110 (POP3), 143 (IMAP), 587 (Submission), 993 (IMAPS) and 995 (POP3S) for bruteforce login attacks as well as scans on ports 80 (HTTP) and 443 (HTTPS) for vulnerable installations of phpMyAdmin and other web applications." \
+#	"OpenBL.org" "http://www.openbl.org/"
+#
+delete_ipset openbl_all
+#update openbl_all $[4*60] 0 ipv4 ip \
+#	"http://www.openbl.org/lists/base_all.txt" \
+#	remove_comments \
+#	"attacks" \
+#	"[OpenBL.org](http://www.openbl.org/) last all IPs.  OpenBL.org is detecting, logging and reporting various types of internet abuse. Currently they monitor ports 21 (FTP), 22 (SSH), 23 (TELNET), 25 (SMTP), 110 (POP3), 143 (IMAP), 587 (Submission), 993 (IMAPS) and 995 (POP3S) for bruteforce login attacks as well as scans on ports 80 (HTTP) and 443 (HTTPS) for vulnerable installations of phpMyAdmin and other web applications." \
+#	"OpenBL.org" "http://www.openbl.org/"
+#
+#
 # -----------------------------------------------------------------------------
 # www.dshield.org
 # https://www.dshield.org/xml.html
@@ -4355,6 +4754,7 @@ update blocklist_de_strongips 15 0 ipv4 ip \
 	"Blocklist.de" "https://www.blocklist.de/"
 
 # it seems this is not active any more
+delete_ipset blocklist_de_ircbot
 #update blocklist_de_ircbot 15 0 ipv4 ip \
 #	"http://lists.blocklist.de/lists/ircbot.txt" \
 #	remove_comments \
@@ -4401,15 +4801,16 @@ update zeus 30 0 ipv4 ip \
 # Palevo worm
 # https://palevotracker.abuse.ch/blocklists.php
 # by abuse.ch
-
+# DISCONTINUED
 # includes IP addresses which are being used as botnet C&C for the Palevo crimeware
-update palevo 30 0 ipv4 ip \
-	"https://palevotracker.abuse.ch/blocklists.php?download=ipblocklist" \
-	remove_comments \
-	"malware" \
-	"[Abuse.ch Palevo tracker](https://palevotracker.abuse.ch) worm includes IPs which are being used as botnet C&C for the Palevo crimeware" \
-	"Abuse.ch" "https://palevotracker.abuse.ch/" \
-	can_be_empty
+delete_ipset palevo
+#update palevo 30 0 ipv4 ip \
+#	"https://palevotracker.abuse.ch/blocklists.php?download=ipblocklist" \
+#	remove_comments \
+#	"malware" \
+#	"[Abuse.ch Palevo tracker](https://palevotracker.abuse.ch) worm includes IPs which are being used as botnet C&C for the Palevo crimeware" \
+#	"Abuse.ch" "https://palevotracker.abuse.ch/" \
+#	can_be_empty
 
 
 # -----------------------------------------------------------------------------
@@ -4567,7 +4968,7 @@ update ransomware_torrentlocker_c2 5 0 ipv4 ip \
 # http://www.infiltrated.net/blacklisted
 
 # it appears to be permanently down
-
+delete_ipset infiltrated
 #update infiltrated $[12*60] 0 ipv4 ip \
 #	"http://www.infiltrated.net/blacklisted" \
 #	remove_comments \
@@ -4828,7 +5229,7 @@ update proxz 60 "$[24*60] $[7*24*60] $[30*24*60]" ipv4 ip \
 # this seems abandoned
 #
 #parse_multiproxy() { remove_comments | $CUT_CMD -d ':' -f 1; }
-#
+delete_ipset multiproxy
 #update multiproxy 60 0 ipv4 ip \
 #	"http://multiproxy.org/txt_all/proxy.txt" \
 #	parse_multiproxy \
@@ -5108,12 +5509,13 @@ update packetmail_ramnode $[4*60] 0 ipv4 ip \
 	"[PacketMail.net](https://www.packetmail.net/) IP addresses that have been detected performing TCP SYN to 81.4.103.251 to a non-listening service or daemon. No assertion is made, nor implied, that any of the below listed IP addresses are accurate, malicious, hostile, or engaged in nefarious acts. Use this list at your own risk." \
 	"PacketMail.net" "https://www.packetmail.net/"
 
-update packetmail_carisirt $[4*60] 0 ipv4 ip \
-	"https://www.packetmail.net/iprep_CARISIRT.txt" \
-	 parse_packetmail \
-	"reputation" \
-	"[PacketMail.net](https://www.packetmail.net/) IP addresses that have been detected performing TCP SYN to 66.240.206.5 to a non-listening service or daemon. No assertion is made, nor implied, that any of the below listed IP addresses are accurate, malicious, hostile, or engaged in nefarious acts. Use this list at your own risk." \
-	"PacketMail.net" "https://www.packetmail.net/"
+delete_ipset packetmail_carisirt
+#update packetmail_carisirt $[4*60] 0 ipv4 ip \
+#	"https://www.packetmail.net/iprep_CARISIRT.txt" \
+#	 parse_packetmail \
+#	"reputation" \
+#	"[PacketMail.net](https://www.packetmail.net/) IP addresses that have been detected performing TCP SYN to 66.240.206.5 to a non-listening service or daemon. No assertion is made, nor implied, that any of the below listed IP addresses are accurate, malicious, hostile, or engaged in nefarious acts. Use this list at your own risk." \
+#	"PacketMail.net" "https://www.packetmail.net/"
 
 update packetmail_mail $[4*60] 0 ipv4 ip \
 	"https://www.packetmail.net/iprep_mail.txt" \
@@ -5188,13 +5590,14 @@ update nixspam 15 0 ipv4 ip \
 # -----------------------------------------------------------------------------
 # VirBL
 # http://virbl.bit.nl/
-
-update virbl 60 0 ipv4 ip \
-	"http://virbl.bit.nl/download/virbl.dnsbl.bit.nl.txt" \
-	remove_comments \
-	"spam" \
-	"[VirBL](http://virbl.bit.nl/) is a project of which the idea was born during the RIPE-48 meeting. The plan was to get reports of virus scanning mailservers, and put the IP-addresses that were reported to send viruses on a blacklist." \
-	"VirBL.bit.nl" "http://virbl.bit.nl/"
+# DOES NOT EXIST ANYMORE
+delete_ipset virbl
+#update virbl 60 0 ipv4 ip \
+#	"http://virbl.bit.nl/download/virbl.dnsbl.bit.nl.txt" \
+#	remove_comments \
+#	"spam" \
+#	"[VirBL](http://virbl.bit.nl/) is a project of which the idea was born during the RIPE-48 meeting. The plan was to get reports of virus scanning mailservers, and put the IP-addresses that were reported to send viruses on a blacklist." \
+#	"VirBL.bit.nl" "http://virbl.bit.nl/"
 
 
 # -----------------------------------------------------------------------------
@@ -5289,6 +5692,38 @@ update dataplane_sipinvitation 60 0 ipv4 ip \
 	dataplane_column3 \
 	"attacks" \
 	"[DataPlane.org](https://dataplane.org/) IP addresses that have been seen initiating a SIP INVITE operation to a remote host. This report lists hosts that are suspicious of more than just port scanning.  These hosts may be SIP client cataloging or conducting various forms of telephony abuse." \
+	"DataPlane.org" "https://dataplane.org/" \
+	dont_redistribute
+
+update dataplane_vncrfb 60 0 ipv4 ip \
+	"https://dataplane.org/vncrfb.txt" \
+	dataplane_column3 \
+	"attacks" \
+	"[DataPlane.org](https://dataplane.org/) IP addresses that have been seen initiating a VNC remote frame buffer (RFB) session to a remote host. This report lists hosts that are suspicious of more than just port scanning. These hosts may be VNC server cataloging or conducting various forms of remote access abuse." \
+	"DataPlane.org" "https://dataplane.org/" \
+	dont_redistribute
+
+update dataplane_dnsrd 60 0 ipv4 ip \
+	"https://dataplane.org/dnsrd.txt" \
+	dataplane_column3 \
+	"attacks" \
+	"[DataPlane.org](https://dataplane.org/) IP addresses that have been identified as sending recursive DNS queries to a remote host. This report lists addresses that may be cataloging open DNS resolvers or evaluating cache entries." \
+	"DataPlane.org" "https://dataplane.org/" \
+	dont_redistribute
+
+update dataplane_dnsrdany 60 0 ipv4 ip \
+	"https://dataplane.org/dnsrdany.txt" \
+	dataplane_column3 \
+	"attacks" \
+	"[DataPlane.org](https://dataplane.org/) IP addresses that have been identified as sending recursive DNS IN ANY queries to a remote host. This report lists addresses that may be cataloging open DNS resolvers for the purpose of later using them to facilitate DNS amplification and reflection attacks." \
+	"DataPlane.org" "https://dataplane.org/" \
+	dont_redistribute
+
+update dataplane_dnsversion 60 0 ipv4 ip \
+	"https://dataplane.org/dnsversion.txt" \
+	dataplane_column3 \
+	"attacks" \
+	"[DataPlane.org](https://dataplane.org/) IP addresses that have been identified as sending DNS CH TXT VERSION.BIND queries to a remote host. This report lists addresses that may be cataloging DNS software." \
 	"DataPlane.org" "https://dataplane.org/" \
 	dont_redistribute
 
@@ -5682,19 +6117,21 @@ merge cleantalk_30d ipv4 ip \
 # -----------------------------------------------------------------------------
 # http://www.jigsawsecurityenterprise.com/#!open-blacklist/kafsx
 
-update jigsaw_attacks $[24*60] 0 ipv4 ip \
-	"http://www.slcsecurity.com/feedspublic/IP/malicious-ip-src.txt" \
-	remove_comments \
-	"attacks" \
-	"[Jigsaw Security Enterprise](http://www.jigsawsecurityenterprise.com/#!open-blacklist/kafsx) IP Address Sources of Attack. Information on this blacklist is low fidelity meaning we do not update these indicators that often and there is no validation of the data. These are raw feeds that have not been processed. In order to get the most up to date data and to remove false positives you should consider subscribing to our Jigsaw Enterprise Solution." \
-	"Jigsaw Security Enterprise" "http://www.jigsawsecurityenterprise.com/#!open-blacklist/kafsx"
+delete_ipset jigsaw_attacks
+#update jigsaw_attacks $[24*60] 0 ipv4 ip \
+#	"http://www.slcsecurity.com/feedspublic/IP/malicious-ip-src.txt" \
+#	remove_comments \
+#	"attacks" \
+#	"[Jigsaw Security Enterprise](http://www.jigsawsecurityenterprise.com/#!open-blacklist/kafsx) IP Address Sources of Attack. Information on this blacklist is low fidelity meaning we do not update these indicators that often and there is no validation of the data. These are raw feeds that have not been processed. In order to get the most up to date data and to remove false positives you should consider subscribing to our Jigsaw Enterprise Solution." \
+#	"Jigsaw Security Enterprise" "http://www.jigsawsecurityenterprise.com/#!open-blacklist/kafsx"
 
-update jigsaw_malware $[24*60] 0 ipv4 ip \
-	"http://www.slcsecurity.com/feedspublic/IP/malicious-ip-dst.txt" \
-	remove_comments \
-	"malware" \
-	"[Jigsaw Security Enterprise](http://www.jigsawsecurityenterprise.com/#!open-blacklist/kafsx) Malicious IP Destinations usually C2 or botnet activity or malicious payloads. Information on this blacklist is low fidelity meaning we do not update these indicators that often and there is no validation of the data. These are raw feeds that have not been processed. In order to get the most up to date data and to remove false positives you should consider subscribing to our Jigsaw Enterprise Solution." \
-	"Jigsaw Security Enterprise" "http://www.jigsawsecurityenterprise.com/#!open-blacklist/kafsx"
+delete_ipset jigsaw_malware
+#update jigsaw_malware $[24*60] 0 ipv4 ip \
+#	"http://www.slcsecurity.com/feedspublic/IP/malicious-ip-dst.txt" \
+#	remove_comments \
+#	"malware" \
+#	"[Jigsaw Security Enterprise](http://www.jigsawsecurityenterprise.com/#!open-blacklist/kafsx) Malicious IP Destinations usually C2 or botnet activity or malicious payloads. Information on this blacklist is low fidelity meaning we do not update these indicators that often and there is no validation of the data. These are raw feeds that have not been processed. In order to get the most up to date data and to remove false positives you should consider subscribing to our Jigsaw Enterprise Solution." \
+#	"Jigsaw Security Enterprise" "http://www.jigsawsecurityenterprise.com/#!open-blacklist/kafsx"
 	
 
 # -----------------------------------------------------------------------------
@@ -6249,27 +6686,30 @@ update iblocklist_isp_sprint $[24*60] 0 ipv4 both \
 
 # -----------------------------------------------------------------------------
 # https://blocklist.sigmaprojects.org/
-
-update sp_atma $[24*60] 0 ipv4 both \
-	"https://blocklist.sigmaprojects.org/api.cfc?method=getList&lists=atma" \
-	${ZCAT_CMD} \
-	"attacks" \
-	"Attackers who try to spy or remotely control others' computers by means such as Microsoft remote terminal, SSH, Telnet or shared desktops. Threats for email servers or users: spiders/bots, account hijacking, etc. Sites spreading virus, trojans, spyware, etc. or just being used by them to let their authors know that a new computer has been infected. Threats for servers: exploits, fake identities/agents, DDoS attackers, etc. Port scans, which are the first step towards more dangerous actions. Malicious P2P sharers or bad peers who spread malware, inject bad traffic or share fake archives. (The site states they re-distribute this IP List from iblocklist.com)." \
-	"SigmaProjects.org" "https://blocklist.sigmaprojects.org/"
-
-update sp_anti_infringement $[24*60] 0 ipv4 both \
-	"https://blocklist.sigmaprojects.org/api.cfc?method=getList&lists=anti-infringement" \
-	${ZCAT_CMD} \
-	"organizations" \
-	"IPs of Anti-Infringement organizations. (The site states they re-distribute this IP List from iblocklist.com)" \
-	"SigmaProjects.org" "https://blocklist.sigmaprojects.org/"
-
-update sp_spammers $[24*60] 0 ipv4 both \
-	"https://blocklist.sigmaprojects.org/api.cfc?method=getList&lists=spammers" \
-	${ZCAT_CMD} \
-	"spam" \
-	"Spammers. (The site states they re-distribute this IP List from iblocklist.com)" \
-	"SigmaProjects.org" "https://blocklist.sigmaprojects.org/"
+# DOES NOT EXIST ANYMORE
+delete_ipset sp_atma
+#update sp_atma $[24*60] 0 ipv4 both \
+#	"https://blocklist.sigmaprojects.org/api.cfc?method=getList&lists=atma" \
+#	${ZCAT_CMD} \
+#	"attacks" \
+#	"Attackers who try to spy or remotely control others' computers by means such as Microsoft remote terminal, SSH, Telnet or shared desktops. Threats for email servers or users: spiders/bots, account hijacking, etc. Sites spreading virus, trojans, spyware, etc. or just being used by them to let their authors know that a new computer has been infected. Threats for servers: exploits, fake identities/agents, DDoS attackers, etc. Port scans, which are the first step towards more dangerous actions. Malicious P2P sharers or bad peers who spread malware, inject bad traffic or share fake archives. (The site states they re-distribute this IP List from iblocklist.com)." \
+#	"SigmaProjects.org" "https://blocklist.sigmaprojects.org/"
+#
+delete_ipset sp_anti_infringement
+#update sp_anti_infringement $[24*60] 0 ipv4 both \
+#	"https://blocklist.sigmaprojects.org/api.cfc?method=getList&lists=anti-infringement" \
+#	${ZCAT_CMD} \
+#	"organizations" \
+#	"IPs of Anti-Infringement organizations. (The site states they re-distribute this IP List from iblocklist.com)" \
+#	"SigmaProjects.org" "https://blocklist.sigmaprojects.org/"
+#
+delete_ipset sp_spammers
+#update sp_spammers $[24*60] 0 ipv4 both \
+#	"https://blocklist.sigmaprojects.org/api.cfc?method=getList&lists=spammers" \
+#	${ZCAT_CMD} \
+#	"spam" \
+#	"Spammers. (The site states they re-distribute this IP List from iblocklist.com)" \
+#	"SigmaProjects.org" "https://blocklist.sigmaprojects.org/"
 
 
 # -----------------------------------------------------------------------------
@@ -6308,6 +6748,20 @@ do
 		"urandom.us.to" "http://urandom.us.to/"
 done
 
+
+# -----------------------------------------------------------------------------
+# https://www.us-cert.gov/ncas/alerts/TA17-164A
+
+parse_uscert_csv() {
+	${GREP_CMD} "IP Watchlist" | ${CUT_CMD} -d ',' -f 1
+}
+
+update uscert_hidden_cobra $[24*60] 0 ipv4 ip \
+	"https://www.us-cert.gov/sites/default/files/publications/TA-17-164A_csv.csv" \
+	parse_uscert_csv \
+	"attacks" \
+	"Since 2009, HIDDEN COBRA actors have leveraged their capabilities to target and compromise a range of victims; some intrusions have resulted in the exfiltration of data while others have been disruptive in nature. Commercial reporting has referred to this activity as Lazarus Group and Guardians of Peace. DHS and FBI assess that HIDDEN COBRA actors will continue to use cyber operations to advance their government’s military and strategic objectives. Tools and capabilities used by HIDDEN COBRA actors include DDoS botnets, keyloggers, remote access tools (RATs), and wiper malware. Variants of malware and tools used by HIDDEN COBRA actors include Destover, Wild Positron/Duuzer and Hangman." \
+	"US Cert" "https://www.us-cert.gov/ncas/alerts/TA17-164A"
 
 # -----------------------------------------------------------------------------
 # BadIPs.com
@@ -6569,6 +7023,44 @@ fi
 XFORCE_COMMENTED
 
 # -----------------------------------------------------------------------------
+# X-Force public info
+
+xforce_taxii_parser() {
+	${GREP_CMD} -oP "${IP4_MATCH}"
+}
+
+if [ ! -z "${XFORCE_API_KEY}" -a ! -z "${XFORCE_API_PASSWORD}" ]
+	then
+
+	update xforce_bccs $[24 * 60] 0 ipv4 ip \
+		"https://api.xforce.ibmcloud.com/taxii" \
+		xforce_taxii_parser \
+		"malware" \
+		"[IBM X-Force Exchange](https://exchange.xforce.ibmcloud.com/) Botnet Command and Control Servers" \
+		"IBM X-Force Exchange" "https://exchange.xforce.ibmcloud.com/" \
+		downloader_options "-X POST -H 'Content-Type: application/xml' -H 'Accept: application/xml' -u '${XFORCE_API_KEY}:${XFORCE_API_PASSWORD}' -d '
+<taxii_11:Poll_Request xmlns:taxii_11=\"http://taxii.mitre.org/messages/taxii_xml_binding-1.1\" collection_name=\"xfe.collections.public\">
+  <taxii_11:Poll_Parameters allow_asynch=\"false\">
+    <taxii_11:Query format_id=\"urn:taxii.mitre.org:query:default:1.0\">
+      <tdq:Default_Query targeting_expression_id=\"urn:stix.mitre.org:xml:1.1.1\">
+        <tdq:Criteria operator=\"AND\">
+          <tdq:Criterion negate=\"false\">
+            <tdq:Target> **/@id</tdq:Target>
+            <tdq:Test capability_id=\"urn:taxii.mitre.org:query:capability:core-1\" relationshp=\"equals\">
+              <tdq:Parameter name=\"match_type\">case_insensitive_string</tdq:Parameter>
+              <tdq:Parameter name=\"value\">7ac6c4578facafa0de50b72e7bf8f8c4</tdq:Parameter>
+            </tdq:Test>
+          </tdq:Criterion>
+        </tdq:Criteria>
+      </tdq:Default_Query>
+    </taxii_11:Query>
+  </taxii_11:Poll_Parameters>
+</taxii_11:Poll_Request>
+'"
+fi
+
+
+# -----------------------------------------------------------------------------
 # SORBS test
 
 # this is a test - it does not work without another script that rsyncs files from sorbs.net
@@ -6782,7 +7274,6 @@ merge firehol_level1 ipv4 both \
 	dshield \
 	feodo \
 	fullbogons \
-	palevo \
 	spamhaus_drop \
 	spamhaus_edrop \
 	sslbl \
@@ -6795,9 +7286,7 @@ merge firehol_level2 ipv4 both \
 	"FireHOL" "http://iplists.firehol.org/" \
 	blocklist_de \
 	dshield_1d \
-	greensnow \
-	openbl_1d \
-	virbl \
+	greensnow
 
 merge firehol_level3 ipv4 both \
 	"attacks" \
@@ -6813,7 +7302,6 @@ merge firehol_level3 ipv4 both \
 	malc0de \
 	maxmind_proxy_fraud \
 	myip \
-	openbl_30d \
 	shunlist \
 	snort_ipfilter \
 	sslbl_aggressive \
@@ -6991,6 +7479,9 @@ done
 # -----------------------------------------------------------------------------
 # update the web site, if we have to (does nothing if not enabled)
 update_web
+
+# copy the ipset files to web dir (does nothing if not enabled)
+copy_ipsets_to_web
 
 # commit changes to git (does nothing if not enabled)
 commit_to_git
