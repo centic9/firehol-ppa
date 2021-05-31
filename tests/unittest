@@ -55,7 +55,7 @@ then
     echo ""
     echo ""
   fi
-  echo "Usage: ./unittest [--strace] all|test-dir|test-dir/test.conf [...]"
+  echo "Usage: ./unittest [-v] [--strace] all|test-dir|test-dir/test.conf [...]"
   echo ""
   echo "Example use of strace: see all non-absolute path executions:"
   echo "  grep 'execve[^,]*, \[\"[^/]' strace.*.txt | less"
@@ -100,11 +100,23 @@ export FIREHOL_OVERRIDE_PROGRAM_DIR=$MYTMP/prog
 mkdir -p "$FIREHOL_OVERRIDE_PROGRAM_DIR"
 sed -e "s#[@].*POST[@]#$MYTMP#" ../sbin/install.config.in > "$FIREHOL_OVERRIDE_PROGRAM_DIR/install.config"
 cp $dirname/../sbin/functions.* "$FIREHOL_OVERRIDE_PROGRAM_DIR"
+cp $dirname/../sbin/services.* "$FIREHOL_OVERRIDE_PROGRAM_DIR/"
+
+verbose=0
+if [ "$1" = "-v" ]
+then
+  shift
+  verbose=1
+fi
 
 kcov=`which kcov 2> /dev/null`
 if [ "$kcov" ]
 then
   export kcov="$kcov coverage"
+  if [ $verbose -eq 1 ]
+  then
+    echo "Using $kcov for coverage testing"
+  fi
 fi
 
 strace=0
@@ -227,6 +239,11 @@ do
   export outns=$(newext ns.out $conf)
   export audns=$(newext ns.aud $conf)
 
+  if [ $verbose -eq 1 ]
+  then
+    echo "$conf: start test"
+  fi
+
   case $conf in
     *firehol/*/*.conf)
       clear_iptables
@@ -284,9 +301,14 @@ do
 		CACHE_DIR=/var/run/firehol/update-ipsets/cache
 		LIB_DIR=/var/run/firehol/update-ipsets/lib
 		WEB_DIR=/var/run/firehol/webdir
+		FIREQOS_INTERFACE_DEFAULT_CLASSID=8000
 		export PATH=
 	!
 
+    if [ $verbose -eq 1 ]
+    then
+      echo "$conf: setup"
+    fi
     if [ -x "$pre_sh" ]
     then
       # We can control completely with a testname.pre.sh
@@ -298,7 +320,11 @@ do
       mkdir -p $MYTMP/firehol/services
     fi
 
-    # Run the script
+    if [ $verbose -eq 1 ]
+    then
+      echo "$conf: run"
+      #set -x
+    fi
     if [ -x "$run_sh" ]
     then
       # We can control completely with a testname.pre.sh
@@ -318,15 +344,22 @@ do
         ;;
       esac
     fi
+      set +x
 
-    # If there are explicit post checks to be made, run them
+    if [ $verbose -eq 1 ]
+    then
+      echo "$conf: post-run"
+    fi
     if [ $status -eq 0 -a -x "$post_sh" ]
     then
       "$post_sh" "$conf"
       status=$?
     fi
 
-    # Compare running config to expected
+    if [ $verbose -eq 1 ]
+    then
+      echo "$conf: checks"
+    fi
     if [ $status -ne 0 ]
     then
       errors=$((errors + 1))
@@ -351,10 +384,12 @@ do
           fi
         ;;
         fireqos)
-          tc qdisc show dev veth0 > "$outqdisc"
+          tc qdisc show dev veth0 > "$outqdisc.raw"
           tc class show dev veth0 > "$outclass".raw
-          tc filter show dev veth0 > "$outfilter"
+          tc filter show dev veth0 > "$outfilter".raw
+          $dirname/tools/clean-qdisc "$outqdisc".raw > "$outqdisc"
           $dirname/tools/clean-class "$outclass".raw > "$outclass"
+          $dirname/tools/clean-filter "$outfilter".raw > "$outfilter"
           if ! cmp "$audqdisc" "$outqdisc"
           then
             errors=$((errors + 1))
@@ -367,12 +402,14 @@ do
           fi
         ;;
         link-balancer)
-          ip rule list > "$outrules"
+          ip rule list > "$outrules.raw"
+          $dirname/tools/clean-rules "$outrules".raw > "$outrules"
           for n in $(ip rule list | sed -ne 's/.*lookup //p' | sort -n)
           do
             echo "===== TABLE $n ====="
             ip route list table $n
-          done > "$outtable"
+          done > "$outtable.raw"
+          $dirname/tools/clean-table "$outtable".raw > "$outtable"
           if ! cmp "$audrules" "$outrules"
           then
             errors=$((errors + 1))

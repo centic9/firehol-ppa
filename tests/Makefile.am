@@ -33,7 +33,11 @@ endif
 TOOLS = \
   README.md \
   tools/clean-class \
+  tools/clean-filter \
   tools/clean-iptables \
+  tools/clean-qdisc \
+  tools/clean-rules \
+  tools/clean-table \
   tools/newns \
   unittest \
   update-audit
