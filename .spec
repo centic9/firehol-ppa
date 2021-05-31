@@ -1,7 +1,7 @@
 Summary: An easy to use but powerfull iptables stateful firewall
 Name: firehol
-Version: 1.273
-Release: rh7up
+Version: MYVERSION
+Release: MYRELEASE
 Copyright: GPL
 Group: Applications/Internet
 Source: %{name}-%{version}.tar.bz2
