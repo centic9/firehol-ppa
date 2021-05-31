@@ -1,0 +1,1363 @@
+#
+# This service information database is combined with information extracted
+# from the FireHOL script to create the services documentation.
+#
+# Where information is present in this file it will override the information
+# extracted from the script (which is useful for e.g. complex protocols).
+#
+# All services in the script should at the minimum be listed with a NAME
+# entry.
+#
+# The format is:
+# SERVICE <name>
+# \tNAME <value>
+# \tALIAS <alternative-name>
+# \tWIKI <wikipedia-link>
+# \tCPORT <client-ports>
+# \tSPORT <server-ports>
+# \tMOD <netfilter-module>
+# \tMODNAT <netfilter-nat-module>
+# \tEXAMPLE
+# \t\tmultiline
+# \t\tstrings
+# \tNOTES
+# \t\tmultiline
+# \t\tstrings
+#
+# CPORT and SPORT may be slightly confusing... SPORT is the destination port
+# when defining the server-side of a service.
+#
+
+SERVICE AH
+	NAME IPSec Authentication Header (AH)
+	WIKI  http://en.wikipedia.org/wiki/IPsec#Authentication_Header
+	EXAMPLE
+		server AH accept
+	NOTES
+		For more information see this
+		[Archive of the FreeS/WAN documentation](http://web.archive.org/web/20100918134143/http://www.freeswan.org/freeswan_trees/freeswan-1.99/doc/ipsec.html#AH.ipsec)
+		and [RFC 2402](http://www.ietf.org/rfc/rfc2402.txt).
+
+SERVICE ESP
+	NAME IPSec Encapsulated Security Payload (ESP)
+	EXAMPLE
+		server ESP accept
+	WIKI http://en.wikipedia.org/wiki/IPsec#Encapsulating_Security_Payload
+	NOTES
+		For more information see this
+		[Archive of the FreeS/WAN documentation](http://web.archive.org/web/20100918134143/http://www.freeswan.org/freeswan_trees/freeswan-1.99/doc/ipsec.html#ESP.ipsec)
+		[RFC 2406](http://www.ietf.org/rfc/rfc2406.txt).
+
+SERVICE GRE
+	NAME Generic Routing Encapsulation
+	WIKI  http://en.wikipedia.org/wiki/Generic_Routing_Encapsulation
+	EXAMPLE
+		server GRE accept
+	NOTES
+		Protocol No 47.
+		-
+		For more information see RFC [RFC 2784](http://www.ietf.org/rfc/rfc2784.txt).
+
+SERVICE OSPF
+	NAME Open Shortest Path First
+	WIKI  http://en.wikipedia.org/wiki/Ospf
+	EXAMPLE
+		server OSPF accept
+
+SERVICE all
+	NAME Match all traffic
+	CPORT all
+	SPORT all
+	EXAMPLE
+		server all accept
+	NOTES
+		Matches all traffic (all protocols, ports, etc.). Note that
+		to provide "connections in one direction with replies"
+		semantics, the kernel connection tracker is still used:
+		this will therefore still not match packets if they are
+		not understood as part of a connection (e.g. some
+		ICMPv6 packets, requests and replies taking different routes,
+		complex protocols with no helper loaded).
+		-
+		This service may indirectly setup a set of other services,
+		if they require kernel modules to be loaded.
+
+SERVICE amanda
+	NAME Advanced Maryland Automatic Network Disk Archiver
+	HOME  http://www.amanda.org/
+	WIKI  http://en.wikipedia.org/wiki/Advanced_Maryland_Automatic_Network_Disk_Archiver
+
+SERVICE any
+	NAME Match all traffic (without modules or indirect)
+	CPORT all
+	SPORT all
+	EXAMPLE
+		server any *myname* accept proto 47
+	NOTES
+		Matches all traffic (all protocols, ports, etc), but does
+		not care about kernel modules and does not activate any
+		other service indirectly. In combination with the
+		[firehol-params(5)](#firehol-params5)
+		this service can match unusual traffic (e.g. GRE - protocol 47).
+		-
+		Note that you have to supply your own name in addition to
+		"any".
+
+SERVICE anystateless
+	NAME Match all traffic statelessly
+	CPORT all
+	SPORT all
+	EXAMPLE
+		server anystateless *myname* accept proto 47
+	NOTES
+		Matches all traffic (all protocols, ports, etc), but does
+		not care about kernel modules and does not activate any other
+		service indirectly. In combination with the
+		[firehol-params(5)](#firehol-params5)
+		this service can match unusual traffic (e.g. GRE - protocol 47).
+		-
+		This service is identical to "any" but does not care about
+		the state of traffic.
+		-
+		Note that you have to supply your own name in addition to
+		"anystateless".
+
+SERVICE apcupsd
+	NAME APC UPS Daemon
+	HOME  http://www.apcupsd.com
+	WIKI  http://en.wikipedia.org/wiki/Apcupsd
+	EXAMPLE
+		server apcupsd accept
+	NOTES
+		This service must be defined as "server apcupsd accept" on
+		all machines not directly connected to the UPS (i.e. slaves).
+		-
+		Note that the port defined here is not the default port (6666)
+		used if you download and compile APCUPSD, since the default
+		conflicts with IRC and many distributions (like Debian) have
+		changed this to 6544.
+		-
+		You can define port 6544 in APCUPSD, by changing the value
+		of NETPORT in its configuration file, or overwrite this
+		FireHOL service definition using the procedures described
+		in [Adding Services](#adding-services)
+		in [firehol.conf(5)](#firehol.conf5).
+
+SERVICE apcupsdnis
+	NAME APC UPS Daemon Network Information Server
+	HOME  http://www.apcupsd.com
+	WIKI  http://en.wikipedia.org/wiki/Apcupsd
+	EXAMPLE
+		server apcupsdnis accept
+	NOTES
+		This service allows the remote WEB interfaces of
+		[APCUPSD](http://www.apcupsd.com/), to connect
+		and get information from the server directly connected to
+		the UPS device.
+
+SERVICE aptproxy
+	NAME Advanced Packaging Tool Proxy
+	WIKI  http://en.wikipedia.org/wiki/Apt-proxy
+	EXAMPLE
+		server aptproxy accept
+
+SERVICE asterisk
+	NAME Asterisk PABX
+	HOME  http://www.asterisk.org
+	WIKI  http://en.wikipedia.org/wiki/Asterisk_PBX
+	EXAMPLE
+		server asterisk accept
+	NOTES
+		This service refers only to the manager interface of asterisk.
+		You should normally enable
+		[sip][keyword-service-sip],
+		[h323][keyword-service-h323],
+		[rtp][keyword-service-rtp], etc. at the
+		firewall level, if you enable the relative channel drivers
+		of asterisk.
+
+SERVICE cups
+	NAME Common UNIX Printing System
+	HOME  http://www.cups.org
+	WIKI  http://en.wikipedia.org/wiki/Common_Unix_Printing_System
+	EXAMPLE
+		server cups accept
+
+SERVICE custom
+	NAME Custom definitions
+	EXAMPLE
+		server custom myimap tcp/143 default accept
+	NOTES
+		The full syntax is:
+		-
+		*subcommand* `custom` *name* *svr-proto/ports* *cli-ports* *action* *params*
+		-
+		This service is used by FireHOL to allow you create rules
+		for services which do not have a definition.
+		-
+		`subcommand`, *action* and *params* have their usual meanings.
+		-
+		A *name* must be supplied along with server
+		ports in the form *proto/range*
+		and client ports which takes only a
+		*range*.
+		-
+		To define services with the built-in extension mechanism
+		to avoid the need for `custom` services,
+		see [Adding Services](#adding-services)
+		in [firehol.conf(5)](#firehol.conf5).
+
+SERVICE cvspserver
+	NAME Concurrent Versions System
+	HOME  http://www.nongnu.org/cvs/
+	WIKI  http://en.wikipedia.org/wiki/Concurrent_Versions_System
+	EXAMPLE
+		server cvspserver accept
+
+SERVICE darkstat
+	NAME Darkstat network traffic analyser
+	HOME https://unix4lyfe.org/darkstat/
+	EXAMPLE
+		server darkstat accept
+
+SERVICE daytime
+	NAME Daytime Protocol
+	WIKI  http://en.wikipedia.org/wiki/Daytime_Protocol
+	EXAMPLE
+		server daytime accept
+
+SERVICE dcc
+	NAME Distributed Checksum Clearinghouse
+	EXAMPLE
+		server dcc accept
+	WIKI http://en.wikipedia.org/wiki/Distributed_Checksum_Clearinghouse
+	NOTES
+		See also this
+		[DCC FAQ](http://www.rhyolite.com/dcc/FAQ.html#firewall-ports).
+
+SERVICE dcpp
+	NAME Direct Connect++ P2P
+	HOME  http://dcplusplus.sourceforge.net
+	EXAMPLE
+		server dcpp accept
+
+SERVICE dhcp
+	NAME Dynamic Host Configuration Protocol
+	WIKI  http://en.wikipedia.org/wiki/Dhcp
+	CPORT 68
+	SPORT udp/67
+	EXAMPLE
+		server dhcp accept
+	NOTES
+		The dhcp service is implemented as stateless rules.
+		-
+		DHCP clients broadcast to the network (src 0.0.0.0
+		dst 255.255.255.255) to find a DHCP server. If the DHCP
+		service was stateful the iptables connection tracker would
+		not match the packets and deny to send the reply.
+		-
+		Note that this change does not affect the security of either
+		DHCP servers or clients, since only the specific ports are
+		allowed (there is no random port at either the server or the
+		client side).
+		-
+		Note also that the "server dhcp accept" or "client dhcp accept"
+		commands should placed within interfaces that do not
+		have src and / or dst defined (because of the initial
+		broadcast).
+		-
+		You can overcome this problem by placing the DHCP service on
+		a separate interface, without a src or dst but with a policy
+		return. Place this interface before the one that defines the
+		rest of the services.
+		-
+		For example:
+		-
+		`interface eth0 dhcp`
+		-
+		`    policy return`
+		-
+		`    server dhcp accept`
+		-
+		-
+		`interface eth0 lan src "$mylan" dst "$myip"`
+		-
+		`    client all accept`
+		-
+		For example:
+		    interface eth0 dhcp
+		      policy return
+		      server dhcp accept
+		    interface eth0 lan src "$mylan" dst "$myip"
+		      client all accept
+		-
+		This service implicitly sets its client or server to ipv4 mode.
+SERVICE dhcprelay
+	NAME DHCP Relay
+	EXAMPLE
+		server dhcprelay accept
+	WIKI http://en.wikipedia.org/wiki/Dynamic_Host_Configuration_Protocol#DHCP_relaying
+	NOTES
+		From RFC 1812 section 9.1.2:
+		-
+		In many cases, BOOTP clients and their associated BOOTP
+		server(s) do not reside on the same IP (sub)network. In
+		such cases, a third-party agent is required to transfer
+		BOOTP messages between clients and servers. Such an agent
+		was originally referred to as a BOOTP forwarding agent.
+		However, to avoid confusion with the IP forwarding function
+		of a router, the name BOOTP relay agent has been adopted
+		instead.
+		-
+		For more information about DHCP Relay see section 9.1.2 of
+		[RFC 1812](http://www.ietf.org/rfc/rfc1812.txt)
+		and section 4 of
+		[RFC 1542](http://www.ietf.org/rfc/rfc1542.txt)
+
+SERVICE dhcpv6
+	NAME Dynamic Host Configuration Protocol for IPv6
+	WIKI https://en.wikipedia.org/wiki/DHCPv6
+	CPORT udp/546
+	SPORT udp/547
+	EXAMPLE
+		server dhcp accept
+		client dhcp accept
+	NOTES
+		The dhcp service is implemented as stateless rules.
+		It cannot be stateful as the connection tracker will not
+		match a unicast reply to a broadcast request. Further,
+		if you wish to add src/dst rule parameters, you must
+		account for both the broadcast and link-local network prefixes.
+		-
+		Clients broadcast from a link-local address to the
+		multicast address ff02::1:2 on UDP port 547 to find a
+		server. The server sends a unicast reply back to the
+		client which listens on UDP port 546.
+		-
+		For a FireHOL interface, creating a client will allow
+		sending to port 547 and receiving on port 546. Creating
+		a server allows sending to port 546 and receiving on port 547.
+		-
+		Unlike DHCP for IPv4, the source ports to be used are not
+		defined in DHCPv6 - see section 5.2 of
+		[RFC3315](http://www.ietf.org/rfc/rfc3315.txt).
+		Some servers are known to make use of this to send from
+		arbitrary ports, so FireHOL does not assume a source port.
+		-
+		This service implicitly sets its client or server to ipv6 mode.
+
+SERVICE dict
+	NAME Dictionary Server Protocol
+	WIKI  http://en.wikipedia.org/wiki/DICT
+	EXAMPLE
+		server dict accept
+	NOTES
+		See
+		[RFC2229](http://www.ietf.org/rfc/rfc2229.txt).
+
+SERVICE distcc
+	NAME Distributed CC
+	HOME  https://code.google.com/p/distcc/
+	WIKI  http://en.wikipedia.org/wiki/Distcc
+	EXAMPLE
+		server distcc accept
+	NOTES
+		For distcc security, please check the
+		[distcc security design](http://distcc.googlecode.com/svn/trunk/doc/web/security.html).
+
+SERVICE dns
+	NAME Domain Name System
+	WIKI  http://en.wikipedia.org/wiki/Domain_Name_System
+	EXAMPLE
+		server dns accept
+	NOTES
+		On very busy DNS servers you may see a few dropped DNS
+		packets in your logs. This is normal. The iptables
+		connection tracker will timeout the session and lose
+		unmatched DNS packets that arrive too late to be useful.
+
+SERVICE echo
+	NAME Echo Protocol
+	WIKI  http://en.wikipedia.org/wiki/Echo_Protocol
+	EXAMPLE
+		server echo accept
+
+SERVICE emule
+	NAME eMule (Donkey network client)
+	HOME  http://www.emule-project.com
+	CPORT many
+	SPORT many
+	EXAMPLE
+		client emule accept src 192.0.2.1
+	NOTES
+		According to
+		[eMule Port Definitions](http://www.emule-project.net/home/perl/help.cgi?l=1&rm=show_topic&topic_id=122),
+		FireHOL defines:
+		-
+		* Accept from any client port to the server at tcp/4661
+		* Accept from any client port to the server at tcp/4662
+		* Accept from any client port to the server at udp/4665
+		* Accept from any client port to the server at udp/4672
+		* Accept from any server port to the client at tcp/4662
+		* Accept from any server port to the client at udp/4672
+		-
+		Use the FireHOL [firehol-client(5)][keyword-firehol-client]
+		command to match the eMule client.
+		-
+		Please note that the eMule client is an HTTP client also.
+
+SERVICE eserver
+	NAME eDonkey network server
+	WIKI  http://en.wikipedia.org/wiki/Eserver
+	EXAMPLE
+		server eserver accept
+
+SERVICE finger
+	NAME Finger Protocol
+	WIKI  http://en.wikipedia.org/wiki/Finger_protocol
+	EXAMPLE
+		server finger accept
+
+SERVICE ftp
+	NAME File Transfer Protocol
+	WIKI  http://en.wikipedia.org/wiki/Ftp
+	EXAMPLE
+		server ftp accept
+	NOTES
+		The FTP service matches both active and passive FTP
+		connections.
+
+SERVICE gift
+	NAME giFT Internet File Transfer
+	HOME  http://gift.sourceforge.net
+	WIKI  http://en.wikipedia.org/wiki/GiFT
+	EXAMPLE
+		server gift accept
+	NOTES
+		The gift FireHOL service supports:
+		-
+		* Gnutella listening at tcp/4302
+		* FastTrack listening at tcp/1214
+		* OpenFT listening at tcp/2182 and tcp/2472
+		-
+		The above ports are the defaults given for the corresponding
+		giFT modules.
+		-
+		To allow access to the user interface ports of giFT, use
+		the [giftui][keyword-service-giftui].
+
+SERVICE giftui
+	NAME giFT Internet File Transfer User Interface
+	HOME  http://gift.sourceforge.net
+	WIKI  http://en.wikipedia.org/wiki/GiFT
+	EXAMPLE
+		server giftui accept
+	NOTES
+		This service refers only to the user interface ports offered
+		by giFT. To allow gift accept P2P requests, use the
+		[gift][keyword-service-gift].
+
+SERVICE gkrellmd
+	NAME GKrellM Daemon
+	HOME  http://gkrellm.net/
+	WIKI  http://en.wikipedia.org/wiki/Gkrellm
+	EXAMPLE
+		server gkrellmd accept
+
+SERVICE h323
+	NAME H.323 VoIP
+	WIKI  http://en.wikipedia.org/wiki/H323
+	EXAMPLE
+		server h323 accept
+
+SERVICE heartbeat
+	NAME HeartBeat
+	HOME  http://www.linux-ha.org/
+	EXAMPLE
+		server heartbeat accept
+	NOTES
+		This FireHOL service has been designed such a way that it
+		will allow multiple heartbeat clusters on the same LAN.
+
+SERVICE http
+	NAME Hypertext Transfer Protocol
+	WIKI  http://en.wikipedia.org/wiki/Http
+	EXAMPLE
+		server http accept
+
+SERVICE httpalt
+	WIKI  http://en.wikipedia.org/wiki/Http
+	ALIAS webcache
+	ALIAS tomcat
+	NAME HTTP alternate port
+	EXAMPLE
+		server httpalt accept
+	NOTES
+		This port is commonly used by web servers, web proxies
+		and caches where the standard [http][keyword-service-http]
+		port is not available or can or should not be used.
+
+SERVICE https
+	NAME Secure Hypertext Transfer Protocol
+	WIKI  http://en.wikipedia.org/wiki/Https
+	EXAMPLE
+		server https accept
+
+SERVICE hylafax
+	NAME HylaFAX
+	HOME  http://www.hylafax.org/
+	WIKI  http://en.wikipedia.org/wiki/Hylafax
+	CPORT many
+	SPORT many
+	EXAMPLE
+		server hylafax accept
+	NOTES
+		This service allows incoming requests to server port
+		tcp/4559 and outgoing from server port tcp/4558.
+		-
+		The correct operation of this service has not been verified.
+		-
+		USE THIS WITH CARE. A HYLAFAX CLIENT MAY OPEN ALL TCP
+		UNPRIVILEGED PORTS TO ANYONE (from port tcp/4558).
+
+SERVICE iax
+	NAME Inter-Asterisk eXchange
+	HOME  http://www.asterisk.org
+	WIKI  http://en.wikipedia.org/wiki/Iax
+	EXAMPLE
+		server iax accept
+	NOTES
+		This service refers to IAX version 1.
+		There is also [iax2][keyword-service-iax2].
+
+SERVICE iax2
+	NAME Inter-Asterisk eXchange v2
+	HOME  http://www.asterisk.org
+	WIKI  http://en.wikipedia.org/wiki/Iax
+	EXAMPLE
+		server iax2 accept
+	NOTES
+		This service refers to IAX version 2.
+		There is also [iax][keyword-service-iax].
+
+SERVICE ICMP
+	ALIAS icmp
+	NAME Internet Control Message Protocol
+	WIKI  http://en.wikipedia.org/wiki/Internet_Control_Message_Protocol
+	EXAMPLE
+		server ICMP accept
+
+SERVICE ICMPV6
+	ALIAS icmpv6
+	NAME Internet Control Message Protocol v6
+	WIKI http://en.wikipedia.org/wiki/ICMPv6
+	EXAMPLE
+		server ICMPV6 accept
+
+SERVICE icp
+	NAME Internet Cache Protocol
+	WIKI http://en.wikipedia.org/wiki/Internet_Cache_Protocol
+	EXAMPLE
+		server icp accept
+
+SERVICE ident
+	NAME Identification Protocol
+	WIKI http://en.wikipedia.org/wiki/Ident_protocol
+	EXAMPLE
+		server ident reject with tcp-reset
+
+SERVICE imap
+	NAME Internet Message Access Protocol
+	WIKI  http://en.wikipedia.org/wiki/Imap
+	EXAMPLE
+		server imap accept
+
+SERVICE imaps
+	NAME Secure Internet Message Access Protocol
+	WIKI  http://en.wikipedia.org/wiki/Imap
+	EXAMPLE
+		server imaps accept
+
+SERVICE ipsecnatt
+	NAME NAT traversal and IPsec
+	WIKI  http://en.wikipedia.org/wiki/NAT_traversal#IPsec_traversal_across_NAT
+
+SERVICE ipv6error
+	NAME ICMPv6 Error Handling
+	EXAMPLE
+		server ipv6error accept
+	NOTES
+		This service is not needed from 3.0.0. It will do nothing
+		but issue a warning from 3.1.0; it will be removed in 4.0.0.
+		-
+		The linux connection tracker ensures that ICMPv6 errors
+		are marked as RELATED. Since 3.0.0, these are automatially
+		accepted by FireHOL, making a separate command redundant.
+
+SERVICE ipv6neigh
+	NAME IPv6 Neighbour discovery
+	WIKI https://en.wikipedia.org/wiki/Neighbor_Discovery_Protocol
+	EXAMPLE
+		client ipv6neigh accept
+		server ipv6neigh accept
+	NOTES
+		IPv6 uses the Neighbour Discovery Protocol to do automatic
+		configuration of routes and to replace ARP. To allow this
+		functionality the network neighbour and router
+		solicitation/advertisement messages should be enabled on
+		each interface.
+		-
+		These rules are stateless since advertisement can happen
+		automatically as well as on solicitation.
+		-
+		Neighbour discovery (incoming) should always be enabled:
+		-
+		    `server ipv6neigh accept`
+		-
+		Neighbour advertisement (outgoing) should always be enabled:
+		-
+		    `client ipv6neigh accept`
+		-
+		The rules should not be used to pass packets across a
+		firewall (e.g. in a router definition) unless the firewall
+		is for a bridge.
+		-
+		This service implicitly sets its client or server to ipv6 mode.
+
+SERVICE ipv6router
+	NAME IPv6 Router discovery
+	WIKI https://en.wikipedia.org/wiki/Neighbor_Discovery_Protocol
+	EXAMPLE
+		client ipv6router accept
+	NOTES
+		IPv6 uses the Neighbour Discovery Protocol to do automatic
+		configuration of routes and to replace ARP. To allow this
+		functionality the network neighbour and router
+		solicitation/advertisement messages should be enabled on
+		each interface.
+		-
+		These rules are stateless since advertisement can happen
+		automatically as well as on solicitation.
+		-
+		Router discovery (incoming) should always be enabled:
+		-
+		    `client ipv6router accept`
+		-
+		Router advertisement (outgoing) should be enabled on
+		a host that routes:
+		-
+		    `server ipv6router accept`
+		-
+		The rules should not be used to pass packets across a
+		firewall (e.g. in a router definition) unless the firewall
+		is for a bridge.
+		-
+		This service implicitly sets its client or server to ipv6 mode.
+
+SERVICE ipv6mld
+	NAME IPv6 Multicast Listener Discovery for IPv6
+	WIKI https://en.wikipedia.org/wiki/Multicast_Listener_Discovery
+	EXAMPLE
+		client ipv6mld accept
+	NOTES
+		IPv6 uses Multicast Listener Discovery to discover multicast
+		listeners and what they are listening for.
+		-
+		In practice all IPv6 nodes are multicast listeners since
+		multicast is used in the neighbour discovery protocol which
+		replaces ARP in IPv4.
+		-
+		These rules are stateless since reports can happen
+		automatically as well as on query.
+		-
+		Unless muticast snooping is disabled across the network, MLD
+		should be enabled for any clients:
+		-
+		    `client ipv6mld accept`
+		-
+		MLD should also be enabled as a server on any hosts acting as a
+		router:
+		-
+		    `server ipv6mld accept`
+		-
+		The rules should generally not be used to pass packets across a
+		firewall (e.g. in a router definition) unless the firewall
+		is for a bridge.
+		-
+		This service implicitly sets its client or server to ipv6 mode.
+
+SERVICE irc
+	NAME Internet Relay Chat
+	WIKI  http://en.wikipedia.org/wiki/Internet_Relay_Chat
+	EXAMPLE
+		server irc accept
+
+SERVICE isakmp
+	NAME Internet Security Association and Key Management Protocol (IKE)
+	WIKI  http://en.wikipedia.org/wiki/ISAKMP
+	EXAMPLE
+		server isakmp accept
+	NOTES
+		For more information see the
+		[Archive of the FreeS/WAN documentation](http://web.archive.org/web/20100918134143/http://www.freeswan.org/freeswan_trees/freeswan-1.99/doc/ipsec.html#IKE.ipsec)
+
+SERVICE jabber
+	NAME Extensible Messaging and Presence Protocol
+	WIKI  http://en.wikipedia.org/wiki/Jabber
+	EXAMPLE
+		server jabber accept
+	NOTES
+		Allows clear and SSL client-to-server connections.
+
+SERVICE jabberd
+	NAME Extensible Messaging and Presence Protocol (Server)
+	WIKI  http://en.wikipedia.org/wiki/Jabber
+	EXAMPLE
+		server jabberd accept
+	NOTES
+		Allows clear and SSL client-to-server and server-to-server
+		connections.
+		-
+		Use this service for a jabberd server. In all other cases,
+		use the [jabber][keyword-service-jabber].
+
+SERVICE l2tp
+	NAME Layer 2 Tunneling Protocol
+	WIKI  http://en.wikipedia.org/wiki/L2tp
+
+SERVICE ldap
+	NAME Lightweight Directory Access Protocol
+	WIKI  http://en.wikipedia.org/wiki/Ldap
+	EXAMPLE
+		server ldap accept
+
+SERVICE ldaps
+	NAME Secure Lightweight Directory Access Protocol
+	WIKI  http://en.wikipedia.org/wiki/Ldap
+	EXAMPLE
+		server ldaps accept
+
+SERVICE lpd
+	NAME Line Printer Daemon Protocol
+	WIKI  http://en.wikipedia.org/wiki/Line_Printer_Daemon_protocol
+	EXAMPLE
+		server lpd accept
+	NOTES
+		LPD is documented in
+		[RFC 1179](http://www.ietf.org/rfc/rfc1179.txt).
+		-
+		Since many operating systems incorrectly use the non-default
+		client ports for LPD access, this definition allows any
+		client port to access the service (in addition to
+		the RFC defined 721 to 731 inclusive).
+
+SERVICE microsoft_ds
+	NAME Direct Hosted (NETBIOS-less) SMB
+	ALIAS ms_ds
+	EXAMPLE
+		server microsoft_ds accept
+	NOTES
+		Direct Hosted (i.e. NETBIOS-less SMB)
+		-
+		This is another NETBIOS Session Service with minor
+		differences with [netbios_ssn][keyword-service-netbios_ssn].
+		It is supported only by Windows 2000 and Windows XP and
+		it offers the advantage of being independent of WINS for
+		name resolution.
+		-
+		It seems that samba supports transparently this protocol
+		on the [netbios_ssn][keyword-service-netbios_ssn] ports, so
+		that either direct hosted or traditional SMB can be served
+		simultaneously.
+		-
+		Please refer to the [netbios_ssn][keyword-service-netbios_ssn]
+		for more information.
+
+SERVICE mms
+	NAME Microsoft Media Server
+	WIKI  http://en.wikipedia.org/wiki/Microsoft_Media_Server
+	MOD See [here](http://www.netfilter.org/documentation/HOWTO/netfilter-extensions-HOWTO-5.html#ss5.5).
+	MODNAT See [here](http://www.netfilter.org/documentation/HOWTO/netfilter-extensions-HOWTO-5.html#ss5.5).
+	EXAMPLE
+		server mms accept
+	NOTES
+		Microsoft's proprietary network streaming protocol used
+		to transfer unicast data in Windows Media Services
+		(previously called NetShow Services).
+
+SERVICE msn
+	NAME Microsoft MSN Messenger Service
+	EXAMPLE
+		server msn accept
+	NOTES
+
+SERVICE msnp
+	NAME msnp
+	EXAMPLE
+		server msnp accept
+
+SERVICE multicast
+	NAME Multicast
+	WIKI  http://en.wikipedia.org/wiki/Multicast
+	CPORT N/A
+	SPORT N/A
+	EXAMPLE
+		server multicast reject with proto-unreach
+	NOTES
+		The multicast service matches all packets sent to
+		the $MULTICAST_IPS addresses using IGMP or UDP.
+		For IPv4 that means 224.0.0.0/4 and for IPv6 FF00::/16.
+
+SERVICE mysql
+	NAME MySQL
+	HOME  http://www.mysql.com/
+	WIKI  http://en.wikipedia.org/wiki/Mysql
+	EXAMPLE
+		server mysql accept
+
+SERVICE netbackup
+	NAME Veritas NetBackup service
+	WIKI  http://en.wikipedia.org/wiki/Netbackup
+	EXAMPLE
+		server netbackup accept
+		client netbackup accept
+	NOTES
+		To use this service you must define it as both client and
+		server in NetBackup clients and NetBackup servers.
+
+SERVICE netbios_dgm
+	NAME NETBIOS Datagram Distribution Service
+	WIKI  http://en.wikipedia.org/wiki/Netbios#Datagram_distribution_service
+	EXAMPLE
+		server netbios_dgm accept
+	NOTES
+		See also the [samba][keyword-service-samba].
+		-
+		Keep in mind that this service broadcasts (to the broadcast
+		address of your LAN) UDP packets. If you place this service
+		within an interface that has a dst parameter, remember to
+		include (in the dst parameter) the broadcast address of your
+		LAN too.
+
+SERVICE netbios_ns
+	NAME NETBIOS Name Service
+	WIKI  http://en.wikipedia.org/wiki/Netbios#Name_service
+	EXAMPLE
+		server netbios_ns accept
+	NOTES
+		See also the [samba][keyword-service-samba].
+
+SERVICE netbios_ssn
+	NAME NETBIOS Session Service
+	WIKI  http://en.wikipedia.org/wiki/Netbios#Session_service
+	EXAMPLE
+		server netbios_ssn accept
+	NOTES
+		See also the [samba][keyword-service-samba].
+		-
+		Please keep in mind that newer NETBIOS clients prefer to use
+		port 445 ([microsoft_ds][keyword-service-microsoft_ds]) for the
+		NETBIOS session service, and when this is not available they
+		fall back to port 139 (netbios_ssn). Versions of samba above
+		3.x bind automatically to ports 139 and 445.
+		-
+		If you have an older samba version and your policy on an
+		interface or router is DROP, clients trying to access port
+		445 will have to timeout before falling back to port 139.
+		This timeout can be up to several minutes.
+		-
+		To overcome this problem you can explicitly REJECT the
+		[microsoft_ds][keyword-service-microsoft_ds] with a
+		tcp-reset message:
+		-
+		server microsoft_ds reject with tcp-reset
+
+SERVICE nfs
+	NAME Network File System
+	WIKI  http://en.wikipedia.org/wiki/Network_File_System_%28protocol%29
+	SPORT many
+	EXAMPLE
+		client nfs accept dst 192.0.2.1
+	NOTES
+		The NFS service queries the RPC service on the NFS server
+		host to find out the ports nfsd, mountd, lockd and rquotad
+		are listening. Then, according to these ports it sets up
+		rules on all the supported protocols (as reported by RPC)
+		in order the clients to be able to reach the server.
+		-
+		For this reason, the NFS service requires that:
+		-
+		* the firewall is restarted if the NFS server is restarted
+		* the NFS server must be specified on all nfs statements (only if it is not the localhost)
+		-
+		Since NFS queries the remote RPC server, it is required to
+		also be allowed to do so, by allowing the
+		[portmap][keyword-service-portmap] too. Take care that
+		this is allowed by the running firewall when FireHOL tries
+		to query the RPC server. So you might have to setup NFS in
+		two steps: First add the portmap service and activate the
+		firewall, then add the NFS service and restart the firewall.
+		-
+		To avoid this you can setup your NFS server to listen on
+		pre-defined ports, as documented in
+		[NFS Howto][NFS Howto].
+		If you do this then you will have to define the the ports
+		using the procedure described
+		in [Adding Services](#adding-services)
+		in [firehol.conf(5)](#firehol.conf5).
+		-
+		[NFS Howto]: http://nfs.sourceforge.net/nfs-howto/ar01s06.html#nfs_firewalls
+
+SERVICE nis
+	NAME Network Information Service
+	WIKI  http://en.wikipedia.org/wiki/Network_Information_Service
+	SPORT many
+	EXAMPLE
+		client nis accept dst 192.0.2.1
+	NOTES
+		The nis service queries the RPC service on the nis server
+		host to find out the ports ypserv and yppasswdd are listening.
+		Then, according to these ports it sets up rules on all the
+		supported protocols (as reported by RPC) in order the clients
+		to be able to reach the server.
+		-
+		For this reason, the nis service requires that:
+		-
+		* the firewall is restarted if the nis server is restarted
+		* the nis server must be specified on all nis statements (only if it is not the localhost)
+		-
+		Since nis queries the remote RPC server, it is required to
+		also be allowed to do so, by allowing the
+		[portmap][keyword-service-portmap] too. Take care that
+		this is allowed by the running firewall when FireHOL tries
+		to query the RPC server. So you might have to setup nis in
+		two steps: First add the portmap service and activate the
+		firewall, then add the nis service and restart the firewall.
+		-
+		This service was added to FireHOL by
+		[Carlos Rodrigues](http://sourceforge.net/p/firehol/feature-requests/20/).
+		His comments regarding this implementation, are:
+		-
+		These rules work for client access only!
+		-
+		Pushing changes to slave servers won't work if these rules
+		are active somewhere between the master and its slaves,
+		because it is impossible to predict the ports where yppush
+		will be listening on each push.
+		-
+		Pulling changes directly on the slaves will work, and could
+		be improved performance-wise if these rules are modified to
+		open fypxfrd. This wasn't done because it doesn't make that
+		much sense since pushing changes on the master server is
+		the most common, and recommended, way to replicate maps.
+
+SERVICE nntp
+	NAME Network News Transfer Protocol
+	WIKI  http://en.wikipedia.org/wiki/Nntp
+	EXAMPLE
+		server nntp accept
+
+SERVICE nntps
+	NAME Secure Network News Transfer Protocol
+	WIKI  http://en.wikipedia.org/wiki/Nntp
+	EXAMPLE
+		server nntps accept
+
+SERVICE nrpe
+	NAME Nagios NRPE
+	WIKI http://en.wikipedia.org/wiki/Nagios#NRPE
+
+SERVICE ntp
+	NAME Network Time Protocol
+	WIKI  http://en.wikipedia.org/wiki/Network_Time_Protocol
+	EXAMPLE
+		server ntp accept
+
+SERVICE nut
+	NAME Network UPS Tools
+	HOME  http://www.networkupstools.org/
+	EXAMPLE
+		server nut accept
+
+SERVICE nxserver
+	NAME NoMachine NX Server
+	WIKI  http://en.wikipedia.org/wiki/NX_Server
+	EXAMPLE
+		server nxserver accept
+	NOTES
+		Default ports used by NX server for connections without
+		encryption.
+		-
+		Note that nxserver also needs the [ssh][keyword-service-ssh]
+		to be enabled.
+		-
+		This information has been extracted from this
+		The TCP ports used by nxserver are
+		4000 + DISPLAY_BASE to 4000 + DISPLAY_BASE + DISPLAY_LIMIT.
+		DISPLAY_BASE and DISPLAY_LIMIT are set in /usr/NX/etc/node.conf
+		and the defaults are DISPLAY_BASE=1000 and DISPLAY_LIMIT=200.
+		-
+		For encrypted nxserver sessions, only
+		[ssh][keyword-service-ssh] is needed.
+
+SERVICE openvpn
+	NAME OpenVPN
+	HOME http://openvpn.net/
+	WIKI http://en.wikipedia.org/wiki/OpenVPN
+
+SERVICE oracle
+	NAME Oracle Database
+	WIKI  http://en.wikipedia.org/wiki/Oracle_db
+	EXAMPLE
+		server oracle accept
+
+SERVICE ping
+	NAME Ping (ICMP echo)
+	WIKI  http://en.wikipedia.org/wiki/Ping
+	CPORT N/A
+	SPORT N/A
+	EXAMPLE
+		server ping accept
+	NOTES
+		This services matches requests of protocol ICMP and type
+		echo-request (TYPE=8) and their replies of type echo-reply
+		(TYPE=0).
+		-
+		The ping service is stateful.
+
+SERVICE pop3
+	NAME Post Office Protocol
+	WIKI  http://en.wikipedia.org/wiki/Pop3
+	EXAMPLE
+		server pop3 accept
+
+SERVICE pop3s
+	NAME Secure Post Office Protocol
+	WIKI  http://en.wikipedia.org/wiki/Pop3
+	EXAMPLE
+		server pop3s accept
+
+SERVICE portmap
+	ALIAS sunrpc
+	NAME Open Network Computing Remote Procedure Call - Port Mapper
+	WIKI  http://en.wikipedia.org/wiki/Portmap
+	EXAMPLE
+		server portmap accept
+
+SERVICE postgres
+	NAME PostgreSQL
+	WIKI  http://en.wikipedia.org/wiki/Postgres
+	EXAMPLE
+		server postgres accept
+
+SERVICE pptp
+	NAME Point-to-Point Tunneling Protocol
+	WIKI  http://en.wikipedia.org/wiki/Pptp
+	EXAMPLE
+		server pptp accept
+
+SERVICE privoxy
+	NAME Privacy Proxy
+	HOME  http://www.privoxy.org/
+	EXAMPLE
+		server privoxy accept
+
+SERVICE radius
+	NAME Remote Authentication Dial In User Service (RADIUS)
+	WIKI  http://en.wikipedia.org/wiki/RADIUS
+	EXAMPLE
+		server radius accept
+
+SERVICE radiusold
+	NAME Remote Authentication Dial In User Service (RADIUS)
+	WIKI  http://en.wikipedia.org/wiki/RADIUS
+	EXAMPLE
+		server radiusold accept
+
+SERVICE radiusoldproxy
+	NAME Remote Authentication Dial In User Service (RADIUS)
+	WIKI  http://en.wikipedia.org/wiki/RADIUS
+	EXAMPLE
+		server radiusoldproxy accept
+
+SERVICE radiusproxy
+	NAME Remote Authentication Dial In User Service (RADIUS)
+	WIKI  http://en.wikipedia.org/wiki/RADIUS
+	EXAMPLE
+		server radiusproxy accept
+
+SERVICE rdp
+	NAME Remote Desktop Protocol
+	WIKI  http://en.wikipedia.org/wiki/Remote_Desktop_Protocol
+	EXAMPLE
+		server rdp accept
+	NOTES
+		Remote Desktop Protocol is also known also as
+		Terminal Services.
+
+SERVICE rndc
+	NAME Remote Name Daemon Control
+	WIKI  http://en.wikipedia.org/wiki/Rndc
+	EXAMPLE
+		server rndc accept
+
+SERVICE rsync
+	NAME rsync protocol
+	HOME  http://rsync.samba.org/
+	WIKI  http://en.wikipedia.org/wiki/Rsync
+	EXAMPLE
+		server rsync accept
+
+SERVICE rtp
+	NAME Real-time Transport Protocol
+	WIKI  http://en.wikipedia.org/wiki/Real-time_Transport_Protocol
+	EXAMPLE
+		server rtp accept
+	NOTES
+		RTP ports are generally all the UDP ports.
+		This definition narrows down RTP ports to UDP 10000 to 20000.
+
+SERVICE samba
+	NAME Samba
+	CPORT default
+	SPORT many
+	HOME http://www.samba.org/
+	WIKI http://en.wikipedia.org/wiki/Samba_(software)
+	EXAMPLE
+		server samba accept
+	NOTES
+		The samba service automatically sets all the rules for
+		[netbios_ns][keyword-service-netbios_ns],
+		[netbios_dgm][keyword-service-netbios_dgm],
+		[netbios_ssn][keyword-service-netbios_ssn] and
+		[microsoft_ds][keyword-service-microsoft_ds].
+		-
+		Please refer to the notes of the above services for more
+		information.
+		-
+		NETBIOS initiates based on the broadcast address of an
+		interface (request goes to broadcast address) but the server
+		responds from its own IP address. This makes the
+		"server samba accept" statement drop the server reply,
+		because of the way the iptables connection tracker works.
+		-
+		This service definition includes a hack, that allows a
+		Linux samba server to respond correctly in such situations,
+		by allowing new outgoing connections from the well known
+		[netbios_ns][keyword-service-netbios_ns] port to the clients
+		high ports.
+		-
+		However, for clients and routers this hack is not applied
+		because it would open all unprivileged ports to the samba
+		server. The only solution to overcome the problem in such
+		cases (routers or clients) is to build a trust relationship
+		between the samba servers and clients.
+
+SERVICE sane
+	NAME SANE Scanner service
+	HOME http://www.sane-project.org/
+	MODNAT N/A
+
+SERVICE sip
+	NAME Session Initiation Protocol
+	EXAMPLE
+		server sip accept
+	WIKI http://en.wikipedia.org/wiki/Session_Initiation_Protocol
+	NOTES
+		[SIP](http://www.voip-info.org/wiki/view/SIP) is an IETF
+		standard protocol (RFC 2543) for initiating interactive user
+		sessions involving multimedia elements such as video, voice,
+		chat, gaming, etc. SIP works in the application layer of
+		the OSI communications model.
+
+SERVICE smtp
+	NAME Simple Mail Transport Protocol
+	WIKI http://en.wikipedia.org/wiki/Simple_Mail_Transfer_Protocol
+	EXAMPLE
+		server smtp accept
+
+SERVICE smtps
+	NAME Secure Simple Mail Transport Protocol
+	WIKI http://en.wikipedia.org/wiki/SMTPS
+	EXAMPLE
+		server smtps accept
+
+SERVICE snmp
+	NAME Simple Network Management Protocol
+	WIKI http://en.wikipedia.org/wiki/Simple_Network_Management_Protocol
+	EXAMPLE
+		server snmp accept
+
+SERVICE snmptrap
+	NAME SNMP Trap
+	WIKI http://en.wikipedia.org/wiki/Simple_Network_Management_Protocol#Trap
+	EXAMPLE
+		server snmptrap accept
+	NOTES
+		An SNMP trap is a notification from an agent to a manager.
+
+SERVICE socks
+	NAME SOCKet Secure
+	WIKI http://en.wikipedia.org/wiki/SOCKS
+	EXAMPLE
+		server socks accept
+	NOTES
+		See also [RFC 1928](http://www.ietf.org/rfc/rfc1928.txt).
+
+SERVICE squid
+	NAME Squid Web Cache
+	HOME http://www.squid-cache.org/
+	WIKI http://en.wikipedia.org/wiki/Squid_(software)
+	EXAMPLE
+		server squid accept
+
+SERVICE ssh
+	NAME Secure Shell Protocol
+	WIKI http://en.wikipedia.org/wiki/Secure_Shell
+	EXAMPLE
+		server ssh accept
+
+SERVICE stun
+	NAME Session Traversal Utilities for NAT
+	WIKI http://en.wikipedia.org/wiki/STUN
+	EXAMPLE
+		server stun accept
+	NOTES
+		[STUN](http://www.voip-info.org/wiki/view/STUN)
+		is a protocol for assisting devices behind a NAT firewall or
+		router with their packet routing.
+
+SERVICE submission
+	NAME SMTP over SSL/TLS submission
+	WIKI http://en.wikipedia.org/wiki/Simple_Mail_Transfer_Protocol
+	EXAMPLE
+		server submission accept
+	NOTES
+		Submission is essentially normal SMTP with an SSL/TLS
+		negotiation.
+
+SERVICE swat
+	NAME Samba Web Administration Tool
+	HOME http://www.samba.org/samba/docs/man/Samba-HOWTO-Collection/SWAT.html
+	EXAMPLE
+		server swat accept
+
+SERVICE syslog
+	NAME Syslog Remote Logging Protocol
+	WIKI http://en.wikipedia.org/wiki/Syslog
+	EXAMPLE
+		server syslog accept
+
+SERVICE telnet
+	NAME Telnet
+	WIKI http://en.wikipedia.org/wiki/Telnet
+	EXAMPLE
+		server telnet accept
+
+SERVICE tftp
+	NAME Trivial File Transfer Protocol
+	WIKI http://en.wikipedia.org/wiki/Trivial_File_Transfer_Protocol
+	EXAMPLE
+		server tftp accept
+
+SERVICE time
+	NAME Time Protocol
+	WIKI http://en.wikipedia.org/wiki/Time_Protocol
+	EXAMPLE
+		server time accept
+
+SERVICE timestamp
+	NAME ICMP Timestamp
+	CPORT N/A
+	SPORT N/A
+	WIKI http://en.wikipedia.org/wiki/Internet_Control_Message_Protocol#Timestamp
+	EXAMPLE
+		server timestamp accept
+	NOTES
+		This services matches requests of protocol ICMP and type
+		timestamp-request (TYPE=13) and their replies of type
+		timestamp-reply (TYPE=14).
+		-
+		The timestamp service is stateful.
+
+SERVICE upnp
+	NAME Universal Plug and Play
+	EXAMPLE
+		server upnp accept
+	HOME http://upnp.sourceforge.net/
+	WIKI http://en.wikipedia.org/wiki/Universal_Plug_and_Play
+	NOTES
+		For a Linux implementation see:
+		[Linux IGD](http://linux-igd.sourceforge.net/).
+
+SERVICE uucp
+	NAME Unix-to-Unix Copy
+	WIKI http://en.wikipedia.org/wiki/UUCP
+	EXAMPLE
+		server uucp accept
+
+SERVICE vmware
+	NAME vmware
+	EXAMPLE
+		server vmware accept
+	NOTES
+		Used from VMWare 1 and up. See the
+		[VMWare KnowledgeBase](http://kb.vmware.com/selfservice/microsites/search.do?language=en_US&cmd=displayKC&externalId=1012382).
+
+SERVICE vmwareauth
+	NAME vmwareauth
+	EXAMPLE
+		server vmwareauth accept
+	NOTES
+		Used from VMWare 1 and up. See the
+		[VMWare KnowledgeBase](http://kb.vmware.com/selfservice/microsites/search.do?language=en_US&cmd=displayKC&externalId=1012382).
+
+SERVICE vmwareweb
+	NAME vmwareweb
+	EXAMPLE
+		server vmwareweb accept
+	NOTES
+		Used from VMWare 2 and up. See
+		[VMWare Server 2.0 release notes](http://www.vmware.com/support/server2/doc/releasenotes_vmserver2.html)
+		and the
+		[VMWare KnowledgeBase](http://kb.vmware.com/selfservice/microsites/search.do?language=en_US&cmd=displayKC&externalId=1012382).
+
+SERVICE vnc
+	NAME Virtual Network Computing
+	WIKI http://en.wikipedia.org/wiki/Virtual_Network_Computing
+	EXAMPLE
+		server vnc accept
+	NOTES
+		VNC is a graphical desktop sharing protocol.
+SERVICE webmin
+	NAME Webmin Administration System
+	HOME http://www.webmin.com/
+	EXAMPLE
+		server webmin accept
+
+SERVICE whois
+	NAME WHOIS Protocol
+	WIKI http://en.wikipedia.org/wiki/Whois
+	EXAMPLE
+		server whois accept
+
+SERVICE xbox
+	CPORT default
+	SPORT many
+	NAME Xbox Live
+	EXAMPLE
+		client xbox accept
+	NOTES
+		Definition for the Xbox live service.
+		-
+		See program source for contributor details.
+
+SERVICE xdmcp
+	NAME X Display Manager Control Protocol
+	EXAMPLE
+		server xdmcp accept
+	WIKI http://en.wikipedia.org/wiki/X_display_manager_(program_type)#X_Display_Manager_Control_Protocol
+	NOTES
+		See [Gnome Display Manager](http://www.jirka.org/gdm-documentation/x70.html)
+		for a discussion about XDMCP and firewalls (Gnome Display
+		Manager is a replacement for XDM).

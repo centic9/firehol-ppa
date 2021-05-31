@@ -1,0 +1,25 @@
+
+<!--
+    This file lists internal references within the manual
+    and associates them with anchors in the output.
+
+    Note that the blank line after this comment is required, to keep
+    pandoc(1) happy when formatting.
+  -->
+
+[ADDING SERVICES]: firehol-conf.5.md#adding-services
+[CONFIGURATION HELPER COMMANDS]: firehol-conf.5.md#configuration-helper-commands
+[HELPER COMMANDS]: firehol-conf.5.md#helper-commands
+[INTERFACE SUBCOMMANDS]: firehol-interface.5.md#interface-subcommands
+[REJECT WITH MESSAGES]: firehol-actions.5.md#reject-with-messages
+[ROUTER SUBCOMMANDS]: firehol-router.5.md#router-subcommands
+
+[firehol(1)]: firehol.1.md#firehol1
+[firehol-actions(5)]: firehol-actions.5.md#firehol-actions5
+[firehol.conf(5)]: firehol-conf.5.md#firehol.conf5
+[firehol-modifiers(5)]: firehol-modifiers.5.md#firehol-modifiers5
+[firehol-nat(5)]: firehol-nat.5.md#firehol-nat5
+[firehol-params(5)]: firehol-params.5.md#firehol-params5
+[firehol-proxy(5)]: firehol-proxy.5.md#firehol-proxy5
+[firehol-services(5)]: firehol-services.5.md#firehol-services5
+[firehol-defaults.conf(5)]: firehol-defaults-conf.5.md#firehol-defaults.conf5

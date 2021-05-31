@@ -1,0 +1,876 @@
+#!/bin/bash
+#
+# vnetbuild - linked network namespace setup for humans...
+#
+#   Copyright
+#
+#       Copyright (C) 2015 Phil Whineray <phil@sanewall.org>
+#       Copyright (C) 2015 Costa Tsaousis <costa@tsaousis.gr>
+#
+#   License
+#
+#       This program is free software; you can redistribute it and/or modify
+#       it under the terms of the GNU General Public License as published by
+#       the Free Software Foundation; either version 2 of the License, or
+#       (at your option) any later version.
+#
+#       This program is distributed in the hope that it will be useful,
+#       but WITHOUT ANY WARRANTY; without even the implied warranty of
+#       MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+#       GNU General Public License for more details.
+#
+#       You should have received a copy of the GNU General Public License
+#       along with this program. If not, see <http://www.gnu.org/licenses/>.
+#
+#       See the file COPYING for details.
+#
+
+READLINK_CMD=${READLINK_CMD:-readlink}
+BASENAME_CMD=${BASENAME_CMD:-basename}
+DIRNAME_CMD=${DIRNAME_CMD:-dirname}
+function realdir {
+	local r="$1"; local t=$($READLINK_CMD "$r")
+	while [ "$t" ]; do
+		r=$(cd $($DIRNAME_CMD "$r") && cd $($DIRNAME_CMD "$t") && pwd -P)/$($BASENAME_CMD "$t")
+		t=$($READLINK_CMD "$r")
+	done
+	$DIRNAME_CMD "$r"
+}
+PROGRAM_FILE="$0"
+PROGRAM_DIR="${FIREHOL_OVERRIDE_PROGRAM_DIR:-$(realdir "$0")}"
+PROGRAM_PWD="${PWD}"
+declare -a PROGRAM_ORIGINAL_ARGS=("${@}")
+
+for functions_file in install.config functions.common
+do
+	if [ -r "$PROGRAM_DIR/$functions_file" ]
+	then
+		source "$PROGRAM_DIR/$functions_file"
+	else
+		1>&2 echo "Cannot access $PROGRAM_DIR/$functions_file"
+		exit 1
+	fi
+done
+
+common_disable_localization || exit
+
+marksreset() { :; }
+markdef() { :; }
+if [ -r "${FIREHOL_CONFIG_DIR}/firehol-defaults.conf" ]
+then
+	source "${FIREHOL_CONFIG_DIR}/firehol-defaults.conf" || exit 1
+fi
+
+status=$?
+test $status -eq 0 || exit $status
+
+needroot=Y
+haderror=""
+#gvprog=$NEATO_CMD
+gvprog=$DOT_CMD
+
+gv_devices_left_right=
+if [ "$gv_devices_left_right" ]
+then
+  # Format graph as host | dev1 | dev2 | ...
+  gvdevdownopen=""
+  gvdevdownclose=""
+else
+  # Format graph as host
+  #                 dev1
+  #                 dev2
+  #                 ...
+  gvdevdownopen="{"
+  gvdevdownclose="}"
+fi
+
+gv_label_outside="Y"
+gv_label_outside=""
+
+setup="$1"
+mode="$2"
+outfile="$3"
+
+case "$mode" in
+  ""|-h|help|-v|version)
+    mode=
+    needroot=
+    haderror="Y"
+  ;;
+  start|stop|status)
+    :
+  ;;
+  graphviz)
+    common_require_cmd $PROGRAM_FILE NEATO_CMD
+    common_require_cmd $PROGRAM_FILE DOT_CMD
+    needroot=
+    case "$outfile" in
+      *.gv|"")
+        graphviz=$CAT_CMD
+      ;;
+      *.ps)
+        format=ps
+        graphviz="$gvprog -T$format"
+      ;;
+      *.pdf)
+        format=pdf
+        graphviz="$gvprog -T$format"
+      ;;
+      *.png)
+        format=png
+        graphviz="$gvprog -T$format"
+      ;;
+      *.svg)
+        format=svg
+        graphviz="$gvprog -T$format"
+      ;;
+      *)
+        1>&2 echo "Unrecognised file extension: $mode"
+        haderror="Y"
+      ;;
+    esac
+  ;;
+  *)
+    1>&2 echo "Unrecognised mode: $mode"
+    haderror="Y"
+    needroot=
+  ;;
+esac
+
+if [ "$mode" = "" ]
+then
+  $CAT_CMD <<-EOF
+	FireHOL vnetbuild $VERSION
+	(C) Copyright 2015 Phil Whineray <phil@firehol.org>
+	(C) Copyright 2015 Costa Tsaousis <costa@tsaousis.gr>
+	FireHOL is distributed under the GPL v2+.
+	Home Page: http://firehol.org
+
+	------------------------------------------------------------------------
+	Get notified of new FireHOL releases by subscribing to the mailing list:
+	http://lists.firehol.org/mailman/listinfo/firehol-support/
+	------------------------------------------------------------------------
+	EOF
+fi
+
+if [ "$needroot" -a "${UID}" != "0" ]
+then
+  echo "Error: must be root to use '$mode'"
+  haderror="Y"
+fi
+
+if [ "$haderror" -o $# -lt 2 ]
+then
+  echo ""
+  echo "Usage: sudo vnetbuild CONFIGFILE stop|start|status"
+  echo "   or: vnetbuild CONFIGFILE graphviz OUTFILE.{gv,png,pdf,ps}"
+  exit 1
+else
+  shift
+  shift
+fi
+
+setupbase="${setup##*/}"
+errline=""
+error=""
+
+if ! MYTMP="`$MKTEMP_CMD -d -t vnetbuild-XXXXXX`"
+then
+            echo >&2
+            echo >&2
+            echo >&2 "Cannot create temporary directory."
+            echo >&2
+            exit 1
+fi
+
+myexit() {
+  status=$?
+  if [ "$error" != "" ]
+  then
+    echo "$setupbase: line $errline: $error"
+  fi
+  $RM_CMD -rf $MYTMP
+  exit $status
+}
+
+trap myexit INT
+trap myexit HUP
+trap myexit 0
+
+CURDIR=`pwd`/
+export CURDIR
+
+set -e
+
+$MKDIR_CMD $MYTMP/setup
+$SED_CMD = "$setup" > $MYTMP/withnum
+(echo "cd $CURDIR"; $SED_CMD -e 'N;s/\n/\t/' -e 's/^/lineno=/' -e '/exec\|pre_up/s/[<>|&]/\\&/g' $MYTMP/withnum) > $MYTMP/setup/$setupbase
+
+$MKDIR_CMD $MYTMP/ns
+$MKDIR_CMD $MYTMP/runtime-lines
+$MKDIR_CMD $MYTMP/clusters
+> $MYTMP/clusterlist
+
+current_name=
+ 
+declare_namespace() {
+  errline=$lineno
+  local current_name="$1"
+
+  local NSTMP=$MYTMP/ns/$current_name
+  if [ -d $NSTMP ]
+  then
+    return 0
+  fi
+  $MKDIR_CMD $NSTMP
+  echo $errline > $NSTMP/undefined
+
+  $MKDIR_CMD $NSTMP/devices
+  $MKDIR_CMD $NSTMP/devicepairs
+}
+
+create_namespace() {
+  errline=$lineno
+  current_name="$1"
+  local type="$2"
+
+  NSTMP=$MYTMP/ns/$current_name
+  if [ ! -f $NSTMP/undefined ]
+  then
+    error="$current_name: $($CAT_CMD $NSTMP/type) already defined"
+    return 1
+  fi
+  $RM_CMD -f $NSTMP/undefined
+
+  echo $type > $NSTMP/type
+  echo 0 > $NSTMP/forward
+  > $NSTMP/routes
+  > $NSTMP/devlist
+  > $NSTMP/pairlist
+  > $NSTMP/bridgelist
+  echo $current_name >> $MYTMP/nslist
+  echo $errline > $MYTMP/runtime-lines/$current_name
+}
+
+host() {
+  errline=$lineno
+  declare_namespace "$1"
+  create_namespace "$1" host
+}
+
+switch() {
+  errline=$lineno
+  declare_namespace "$1"
+  create_namespace "$1" switch
+}
+
+dev() {
+  errline=$lineno
+  device="$1"
+  shift
+
+  if [ ! "$current_name" ]
+  then
+    error="cannot define dev outside of a host or switch"
+    return 1
+  fi
+
+  if [ -f $NSTMP/devices/$device ]
+  then
+    error="$current_name/$device: already defined"
+    return 1
+  fi
+
+  local otherns=
+  local otherdev=
+  case $1 in
+    */[a-zA-Z]*)
+      otherns=$(echo $1 | $CUT_CMD -f1 -d/)
+      otherdev=$(echo $1 | $CUT_CMD -f2 -d/)
+      shift
+      if [ -f $MYTMP/ns/$otherns/devicepairs/$otherdev ]
+      then
+        error="$otherns/$otherdev: already has paired device"
+        return 1
+      fi
+    ;;
+  esac
+
+  local type="$($CAT_CMD $NSTMP/type)"
+  if [ "$*" != "" -a "$type" = "switch" ]
+  then
+    error="device in switch may not specify an IP address"
+    return 1
+  fi
+
+
+  f=$NSTMP/devices/$device
+  > $f
+  for ip in "$@"
+  do
+    case $ip in
+      */*)
+       echo "$ip" >> $f
+      ;;
+      *)
+       error="IP address should be expressed as ip/mask"
+       return 1
+      ;;
+    esac
+  done
+
+  if [ "$otherdev" ]
+  then
+    if [ ! -d $MYTMP/ns/$otherns ]
+    then
+      declare_namespace "$otherns"
+    fi
+    echo "$current_name $device" > $MYTMP/ns/$otherns/devicepairs/$otherdev
+    echo "n/a n/a" > $NSTMP/devicepairs/$device
+    echo "$otherns $otherdev" >> $NSTMP/pairlist
+    echo $errline > $MYTMP/runtime-lines/$otherns-pair-$otherdev
+  fi
+
+  echo $device >> $NSTMP/devlist
+  echo $errline > $MYTMP/runtime-lines/$current_name-dev-$device
+  return 0
+}
+
+route() {
+  errline=$lineno
+  if [ ! "$current_name" ]
+  then
+    error="can only specify route in a host"
+    return 1
+  fi
+
+  local type="$($CAT_CMD $NSTMP/type)"
+  if [ "$type" = "switch" ]
+  then
+    error="can only specify route in a host"
+    return 1
+  fi
+
+  echo "$*" >> $NSTMP/routes
+  echo $errline >> $MYTMP/runtime-lines/$current_name-routes
+  return 0
+}
+
+bridgedev() {
+  errline=$lineno
+  device="$1"
+  shift
+
+  if [ ! "$current_name" ]
+  then
+    error="can only specify bridgedev in a host"
+    return 1
+  fi
+
+  local type="$($CAT_CMD $NSTMP/type)"
+  if [ "$type" = "switch" ]
+  then
+    error="can only specify bridgedev in a host"
+    return 1
+  fi
+
+  if [ -f $NSTMP/devices/$device ]
+  then
+    error="$current_name/$device: already defined"
+    return 1
+  fi
+
+  ipf=$NSTMP/devices/$device
+  devf=$ipf-bridged
+  > $ipf
+  > $devf
+  for ipordev in "$@"
+  do
+    case $ipordev in
+      */*)
+       echo "$ipordev" >> $ipf
+      ;;
+      *)
+       echo "$ipordev" >> $devf
+      ;;
+    esac
+  done
+
+  echo $device >> $NSTMP/bridgelist
+  echo $errline > $MYTMP/runtime-lines/$current_name-dev-$device
+  return 0
+}
+
+exec() {
+  errline=$lineno
+  if [ ! "$current_name" ]
+  then
+    error="can only specify exec in a host or switch"
+    return 1
+  fi
+
+  echo "$*" >> $NSTMP/exec
+  echo $errline >> $MYTMP/runtime-lines/$current_name-exec
+  return 0
+}
+
+pre_up() {
+  errline=$lineno
+  device="$1"
+  shift
+
+  if [ ! "$current_name" ]
+  then
+    error="can only specify pre_up in a host or switch"
+    return 1
+  fi
+
+  if [ "$($CAT_CMD $NSTMP/type)" = "switch" -a "$device" = "switch" ]
+  then
+    :
+  elif [ ! -f $NSTMP/devices/$device ]
+  then
+    error="$current_name/$device: device not defined"
+    return 1
+  fi
+
+  echo "$*" >> $NSTMP/pre-up-$device
+  echo $errline >> $MYTMP/runtime-lines/$current_name-pre-up-$device
+  return 0
+}
+
+gv_label() {
+  errline=$lineno
+
+  if [ ! "$current_name" ]
+  then
+    error="can only specify gv_label in a host or switch"
+    return 1
+  fi
+
+  if [ -f $NSTMP/gv_label ]
+  then
+    echo -n '\\n' >> $NSTMP/gv_label
+  fi
+  echo -n "$*" >> $NSTMP/gv_label
+  return 0
+}
+
+gv_omit() {
+  errline=$lineno
+
+  if [ ! "$current_name" ]
+  then
+    error="can only specify gv_omit in a host or switch"
+    return 1
+  fi
+
+  echo > $NSTMP/gv_omit
+  return 0
+}
+
+gv_cluster() {
+  errline=$lineno
+  local cluster="$1"
+  shift
+
+  if [ ! "$current_name" ]
+  then
+    error="can only specify gv_cluster in a host or switch"
+    return 1
+  fi
+
+  if [ ! -f $MYTMP/clusters/$cluster ]
+  then
+    echo "$cluster" >> $MYTMP/clusterlist
+    if [ "$*" ]
+    then
+      echo "$*" > $MYTMP/clusters/$cluster.label
+    fi
+  fi
+  local type="$($CAT_CMD $NSTMP/type)"
+  echo "${type}_$current_name" >> $MYTMP/clusters/$cluster
+  return 0
+}
+
+is_ipv6() {
+  case "$1" in
+    *:*)
+      return 0
+    ;;
+  esac
+  return 1
+}
+
+cd $MYTMP/setup
+. $setupbase
+errline=""
+cd $CURDIR
+
+exists_ns() {
+  if [ "$($IP_CMD netns list | $GREP_CMD -E "^$1([[:space:]]+\(|\$)")" ]
+  then
+    return 0
+  else
+    return 1
+  fi
+}
+
+dev_in_ns() {
+  $IP_CMD netns exec $1 $IP_CMD link list | $GREP_CMD "^[0-9]" | $CUT_CMD -d: -f2 | $CUT_CMD -f1 -d'@' | $TR_CMD -d ' '
+}
+
+get_pids() {
+  # Not in all versions:
+  #   $IP_CMD netns pids $1
+  $FIND_CMD -L /proc/[0-9]*/ns -maxdepth 1 -samefile /var/run/netns/$1 2>/dev/null | $CUT_CMD -f3 -d/
+}
+
+shutdown_ns() {
+  for i in $(dev_in_ns $1)
+  do
+    $IP_CMD netns exec $1 $IP_CMD link set $i down
+  done
+  pids=$(get_pids $1)
+  if [ "$pids" ]; then kill $pids; $SLEEP_CMD 1; fi
+  pids=$(get_pids $1)
+  if [ "$pids" ]; then kill -9 $pids; fi
+}
+
+startup_ns() {
+  for i in $(dev_in_ns $1)
+  do
+    if [ -f $MYTMP/ns/$ns/pre-up-$i ]
+    then
+      errline=$($TR_CMD "\n" "/" < $MYTMP/runtime-lines/$ns-pre-up-$i | $SED_CMD -e s:/$::)
+      error="running pre-up-$i for $ns"
+      $IP_CMD netns exec $ns $SH_CMD -e $MYTMP/ns/$ns/pre-up-$i
+    fi
+    $IP_CMD netns exec $1 $IP_CMD link set $i up
+  done
+}
+
+while read ns
+do
+  while read dev
+  do
+    read errline < $MYTMP/runtime-lines/$ns-dev-$dev
+    if [ ! -f $MYTMP/ns/$ns/devicepairs/$dev ]
+    then
+      error="$ns/$dev has no paired device"
+      exit 1
+    fi
+  done < $MYTMP/ns/$ns/devlist
+
+  while read otherns otherdev
+  do
+    read errline < $MYTMP/runtime-lines/$otherns-pair-$otherdev
+    if [ ! -f $MYTMP/ns/$otherns/devices/$otherdev ]
+    then
+      error="$otherns/$otherdev not defined to be paired with"
+      exit 1
+    fi
+  done < $MYTMP/ns/$ns/pairlist
+done < $MYTMP/nslist
+
+if [ "$mode" = "stop" -o "$mode" = "start" ]
+then
+   while read ns
+   do
+     read errline < $MYTMP/runtime-lines/$ns
+     error="shutting down namespace"
+     exists_ns $ns && shutdown_ns $ns
+   done < $MYTMP/nslist
+
+   while read ns
+   do
+     read errline < $MYTMP/runtime-lines/$ns
+     error="deleting namespace"
+     exists_ns $ns && $IP_CMD netns del $ns
+   done < $MYTMP/nslist
+
+  error=""
+fi
+
+if [ "$mode" = "stop" ]
+then
+  exit 0
+fi
+
+if [ "$mode" = "start" ]
+then
+  while read ns
+  do
+    read errline < $MYTMP/runtime-lines/$ns
+    error="adding namespace"
+    type="$($CAT_CMD $MYTMP/ns/$ns/type)"
+    $IP_CMD netns add $ns
+    if [ "$type" = "switch" ]
+    then
+      error="adding bridge to switch namespace"
+      $IP_CMD netns exec $ns $IP_CMD link add name switch type bridge
+    fi
+  done < $MYTMP/nslist
+
+  while read ns
+  do
+    type="$($CAT_CMD $MYTMP/ns/$ns/type)"
+    while read dev
+    do
+      read errline < $MYTMP/runtime-lines/$ns-dev-$dev
+      read ons odev < $MYTMP/ns/$ns/devicepairs/$dev
+      if [ "$ons" != "n/a" ]
+      then
+        error="adding virtual ethernet to $type namespace"
+        #$IP_CMD link add $dev netns $ns type veth peer netns $ons name $odev
+        $IP_CMD link add $dev netns $ns type veth peer name $odev
+        $IP_CMD link set $odev netns $ons
+      else
+        : # gets set up from the other end
+      fi
+      if [ "$type" = "switch" ]
+      then
+        error="adding virtual ethernet to bridge"
+        $IP_CMD netns exec $ns $IP_CMD link set dev $dev master switch
+      fi
+      while read ip
+      do
+        error="adding ip address to virtual ethernet"
+        if is_ipv6 $ip; then bc=""; v6="-6"; else bc="broadcast +"; v6=""; fi
+        $IP_CMD netns exec $ns $IP_CMD $v6 addr add $ip $bc dev $dev
+      done < $MYTMP/ns/$ns/devices/$dev
+    done < $MYTMP/ns/$ns/devlist
+
+    while read bridge
+    do
+      read errline < $MYTMP/runtime-lines/$ns-dev-$bridge
+      error="adding bridge to host namespace"
+      $IP_CMD netns exec $ns $IP_CMD link add name $bridge type bridge
+      while read dev
+      do
+        error="adding virtual interface to bridge"
+        $IP_CMD netns exec $ns $IP_CMD link set dev $dev master $bridge
+      done < $MYTMP/ns/$ns/devices/$bridge-bridged
+      while read ip
+      do
+        error="adding ip to virtual interface"
+        if is_ipv6 $ip; then bc=""; v6="-6"; else bc="broadcast +"; v6=""; fi
+        $IP_CMD netns exec $ns $IP_CMD $v6 addr add $ip $bc dev $bridge
+      done < $MYTMP/ns/$ns/devices/$bridge
+    done < $MYTMP/ns/$ns/bridgelist
+  done < $MYTMP/nslist
+
+  while read ns
+  do
+    echo "Starting namespace $ns"
+
+    read errline < $MYTMP/runtime-lines/$ns
+    error="starting namespace"
+    startup_ns $ns
+
+    while read route
+    do
+      errline=$($TR_CMD "\n" "/" < $MYTMP/runtime-lines/$ns-routes | $SED_CMD -e s:/$::)
+      error="adding route to $ns"
+      if is_ipv6 "$route"; then bc=""; v6="-6"; else bc="broadcast +"; v6=""; fi
+      $IP_CMD netns exec $ns $IP_CMD $v6 route add $route
+    done < $MYTMP/ns/$ns/routes
+
+    if [ -f $MYTMP/ns/$ns/exec ]
+    then
+      errline=$($TR_CMD "\n" "/" < $MYTMP/runtime-lines/$ns-exec | $SED_CMD -e s:/$::)
+      error="running exec for $ns"
+      $IP_CMD netns exec $ns $SH_CMD -e $MYTMP/ns/$ns/exec
+    fi
+  done < $MYTMP/nslist
+  error=""
+fi
+
+if [ "$mode" = "status" ]
+then
+  while read ns
+  do
+    echo "---------------------- $ns --------------------"
+    if exists_ns $ns
+    then
+      # We remove the @whatever part of the device names since these
+      # appear to be highly unreliable when creating devices in different
+      # namespaces, at least under linux 4.3. Adding in two steps, like
+      # this did not help:
+      #   $IP_CMD link add $dev netns $ns type veth peer name $odev
+      #   $IP_CMD link set $odev netns $ons
+      echo
+      echo "# $IP_CMD addr show"
+      $IP_CMD netns exec $ns $IP_CMD addr show | $SED_CMD 's/@[^:]*:/:/'
+      echo
+      echo "# $IP_CMD route show"
+      $IP_CMD netns exec $ns $IP_CMD route show
+      echo
+      echo "# $BRIDGE_CMD link show"
+      $IP_CMD netns exec $ns $BRIDGE_CMD link show
+    else
+      echo "Namespace not running"
+    fi
+    echo ""
+  done < $MYTMP/nslist
+fi
+
+if [ "$mode" = "graphviz" ]
+then
+  gv=$MYTMP/gv
+  echo "/* process e.g.: $gvprog -Tps filename.gv -o filename.ps */" >$gv
+  echo "graph NET {" >>$gv
+  if [ "$format" != "png" ]
+  then
+    echo "size=7; /* Max size 7 inches */" >>$gv
+  fi
+  echo "overlap=scale;" >>$gv
+  #echo "splines=compound;" >>$gv
+  echo "node [sep=10];" >>$gv
+  echo "edge [color=blue,style=dashed];" >>$gv
+
+  while read cluster
+  do
+    echo "subgraph cluster_$cluster{" >>$gv
+
+    if [ -s "$MYTMP/clusters/$cluster.label" ]
+    then
+      echo "label=\"`$CAT_CMD  $MYTMP/clusters/$cluster.label`\"" >>$gv
+    fi
+
+    while read ns
+    do
+      echo "$ns" >>$gv
+    done < $MYTMP/clusters/$cluster
+
+    echo "}" >>$gv
+  done < $MYTMP/clusterlist
+
+  while read ns
+  do
+    type="$($CAT_CMD $MYTMP/ns/$ns/type)"
+    if [ -f $MYTMP/ns/$ns/gv_label ]
+    then
+      read label < $MYTMP/ns/$ns/gv_label || true
+    else
+      label="$ns"
+    fi
+
+    if [ ! -f $MYTMP/ns/$ns/gv_omit ]
+    then
+      if [ "$type" = "switch" ]
+      then
+        echo "\"switch_$ns\" [shape=ellipse,label=\"$label\"];" >>$gv
+      else
+        echo -n "\"host_$ns\" [shape=record,label=\"$gvdevdownopen$label" >>$gv
+        while read route
+        do
+          echo -n "\\n$route" >>$gv
+        done < $MYTMP/ns/$ns/routes
+        while read bridge
+        do
+          echo -n "|{<$bridge> $bridge" >>$gv
+          while read ip
+          do
+            echo -n "\\n$ip" >>$gv
+          done < $MYTMP/ns/$ns/devices/$bridge
+          while read dev
+          do
+            echo -n "|{" >>$gv
+            echo -n "<$dev> $dev" >>$gv
+            if [ ! "$gv_label_outside" ]
+            then
+              while read ip
+              do
+                echo -n "\n$ip" >>$gv
+              done < $MYTMP/ns/$ns/devices/$dev
+            fi
+            echo -n "}" >>$gv
+            echo "$bridge" > $MYTMP/ns/$ns/suppress-$dev
+          done < $MYTMP/ns/$ns/devices/$bridge-bridged
+          echo -n "}" >>$gv
+        done < $MYTMP/ns/$ns/bridgelist
+        while read dev
+        do
+          if [ !  "$gv_label_outside" -a ! -f $MYTMP/ns/$ns/suppress-$dev ]
+          then
+            echo -n "|<$dev> $dev" >>$gv
+            while read ip
+            do
+              echo -n "\\n$ip" >>$gv
+            done < $MYTMP/ns/$ns/devices/$dev
+          fi
+        done < $MYTMP/ns/$ns/devlist
+        echo "$gvdevdownclose\"];" >>$gv
+      fi
+    fi
+  done < $MYTMP/nslist
+  while read ns
+  do
+    type="$($CAT_CMD $MYTMP/ns/$ns/type)"
+    while read dev
+    do
+      read ons odev < $MYTMP/ns/$ns/devicepairs/$dev
+      if [ "$ons" != "n/a" ]
+      then
+        otype="$($CAT_CMD $MYTMP/ns/$ons/type)"
+
+        if [ "$type" = "switch" ]
+        then
+          from="\"switch_$ns\""
+          fromlabel="taillabel=\"\\n\\n\""
+        else
+          from="\"host_$ns\":\"$dev\""
+          fromlabel="taillabel=\"$dev"
+          while read ip
+          do
+            fromlabel="$fromlabel\\n$ip"
+          done < $MYTMP/ns/$ns/devices/$dev
+          fromlabel="$fromlabel\""
+        fi
+        if [ "$otype" = "switch" ]
+        then
+          to="\"switch_$ons\""
+          tolabel="headlabel=\"\\n\\n\""
+        else
+          to="\"host_$ons\":\"$odev\""
+          tolabel="headlabel=\"$odev"
+          while read ip
+          do
+            tolabel="$tolabel\\n$ip"
+          done < $MYTMP/ns/$ons/devices/$odev
+          tolabel="$tolabel\""
+        fi
+        alllabels=""
+        if [ "$gv_label_outside" ]
+        then
+          if [ "$fromlabel" -o "$tolabel" ]
+          then
+            if [  "$fromlabel" -a "$tolabel" ]
+            then
+              alllabels=" [labelfloat=false,$fromlabel,$tolabel]"
+            else
+              alllabels=" [labelfloat=false,$fromlabel$tolabel]"
+            fi
+          fi
+        fi
+        if [ ! -f $MYTMP/ns/$ns/gv_omit -a ! -f $MYTMP/ns/$ons/gv_omit ]
+        then
+          echo "$from -- $to$alllabels;" >>$gv
+        fi
+      else
+        : # gets set up from the other end
+      fi
+    done < $MYTMP/ns/$ns/devlist
+  done < $MYTMP/nslist
+  echo "}" >>$gv
+
+  if [ "$outfile" = "" ]
+  then
+    $graphviz $gv
+  else
+    $graphviz $gv > "$outfile"
+  fi
+fi
+
+exit 0
