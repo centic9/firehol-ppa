@@ -4456,6 +4456,12 @@ blacklist() {
 				break
 				;;
 
+			nolog)
+				logopts_in_arg=()
+				logopts_out_arg=()
+				shift
+				;;
+
 			log)
 				logopts_in_arg=(log "${2}-IN")
 				logopts_out_arg=(log "${2}-OUT")
@@ -4559,6 +4565,7 @@ blacklist() {
 		if running_ipv4
 		then
 			push_namespace ipv4
+			rule table filter chain "${chain}.out" out "${logopts_out_arg[@]}" proto tcp action REJECT with tcp-reset
 			rule table filter chain "${chain}.out" out "${logopts_out_arg[@]}" action REJECT with icmp-host-unreachable
 			pop_namespace
 		fi
@@ -4566,6 +4573,7 @@ blacklist() {
 		if running_ipv6
 		then
 			push_namespace ipv6
+			rule table filter chain "${chain}.out" out "${logopts_out_arg[@]}" proto tcp action REJECT with tcp-reset
 			rule table filter chain "${chain}.out" out "${logopts_out_arg[@]}" action REJECT with icmp6-addr-unreachable
 			pop_namespace
 		fi
@@ -8028,7 +8036,7 @@ rule() {
 	# In FIREHOL_RULESET_MODE="optimal" (given as the parameter optimal=1) to us,
 	# we just create the state=NEW rules.
 	# We will work normaly though if a helper is required.
-	if [ ${optimal} -eq 1 -a "${table}" = "filter" -a -z "${helper[*]}" ]
+	if [ ${optimal} -eq 1 -a "${table}" = "filter" -a -z "${helper[*]}" -a "${proto[0]}" != "icmpv6" ]
 	then
 		if [[ "${state}" =~ 'NEW' ]]
 		then
@@ -11830,7 +11838,7 @@ firewall_filtering_policy_common_late() {
 
 	if [ "${FIREHOL_DROP_ORPHAN_TCP_RST}" = "1" ]
 	then
-		set_work_function "Silently droping TCP ACK packets (option: FIREHOL_DROP_ORPHAN_TCP_RST)"
+		set_work_function "Silently droping TCP RST packets (option: FIREHOL_DROP_ORPHAN_TCP_RST)"
 
 		# Silently drop orphan TCP/RST packets
 		# before droping INVALID below, otherwise these will be logged as INVALID too
