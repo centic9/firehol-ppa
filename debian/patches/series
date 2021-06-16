@@ -1,3 +1,4 @@
+fix_exit_code_on_status
 debianization.patch
 debianization-usrmerge-transition.patch
 debianization-iptables-legacy.patch
