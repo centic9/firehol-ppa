@@ -1,0 +1,18 @@
+Index: git/sbin/firehol
+===================================================================
+--- git.orig/sbin/firehol	2021-05-31 20:28:57.504710088 +0200
++++ git/sbin/firehol	2021-06-16 09:55:46.415138708 +0200
+@@ -10326,7 +10326,12 @@
+ 		fi
+ 		) >"${FIREHOL_DIR}/status"
+ 		${MORE_CMD} <"${FIREHOL_DIR}/status"
+-		exit $?
++		RET=$?
++		
++		# make the exit handler exit with 0
++		FIREHOL_ACTIVATED_SUCCESSFULLY=1
++		
++		exit $RET
+ 		;;
+ 	
+ 	panic)
