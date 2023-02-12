@@ -1,3 +1,9 @@
+firehol (3.1.7+ds-2.1ubuntu0~ppa1) jammy; urgency=medium
+
+  * Backport to Jammy
+
+ -- Dominik Stadler (Ubuntu key) <dominik.stadler@gmx.at>  Sun, 12 Feb 2023 14:35:28 +0100
+
 firehol (3.1.7+ds-2.1) unstable; urgency=medium
 
   * Non-maintainer upload.
