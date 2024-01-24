@@ -1,0 +1,3 @@
+usr/lib/firehol/install.config   usr/libexec/firehol/install.config
+usr/lib/firehol/functions.common usr/libexec/firehol/functions.common
+usr/lib/firehol/services.common  usr/libexec/firehol/services.common

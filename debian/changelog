@@ -1,9 +1,26 @@
-firehol (3.1.7+ds-2.1) unstable; urgency=medium
+firehol (3.1.7+ds-3) unstable; urgency=medium
 
-  * Non-maintainer upload.
-  * No source change upload to rebuild with debhelper 13.10.
+  * Debianization
+    - introduce a START_FIREHOL=AUTO scheme that allows one to handle firehol
+      with a third-party like ifupdown (Closes: #993322, #536362, #309198);
+    - firehol.NEWS, concisely introduce the START_FIREHOL=AUTO scheme;
+    - firehol.README.Debian, describe the START_FIREHOL=AUTO scheme;
+    - material to handle firehol via the ifupdown tools, introduce;
+    - d/firehol.init, d/p/debianization-source-etc_default.patch,
+      set explicitly the START_FIREHOL=NO scheme as the default scheme
+      (inconsistency fix) (Closes: 976014);
+    - contrib/ipset-apply.sh, now part of firehol-tools (Closes: #1050664);
+    - d/control:
+      - firehol-{,tools-}doc, fireqos-doc, add Multi-Arch: foreign,
+        thanks to Jelmer Vernooĳ <jelmer@debian.org>;
+      - debhelper, migrate to debhelper-compat (=13);
+      - Standards-Version, bump to 4.6.2 (scripts under /usr/libexec);
+      - Dependencies over lsb-base, remove;
+    - firehol scripts, now under the /usr/libexec hierarchy;
+    - d/copyright:
+      - copyright year tuples, refresh.
 
- -- Michael Biebl <biebl@debian.org>  Sat, 15 Oct 2022 12:04:21 +0200
+ -- Jerome Benoit <calculus@rezozer.net>  Wed, 24 Jan 2024 21:34:39 +0000
 
 firehol (3.1.7+ds-2) unstable; urgency=medium
 
@@ -35,7 +52,7 @@ firehol (3.1.6+ds-10) unstable; urgency=medium
     - debian/patches:
       - d/p/debianization-source-etc_default.patch , introduce
         (Closes: #944022);
-    - debian/upstream/metadat, introduce;
+    - debian/upstream/metadata, introduce;
     - debian/changelog, correct.
 
  -- Jerome Benoit <calculus@rezozer.net>  Fri, 08 May 2020 16:16:21 +0000

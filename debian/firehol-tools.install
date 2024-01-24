@@ -1,5 +1,6 @@
-usr/lib/firehol/vnetbuild
-usr/lib/firehol/update-ipsets
-usr/lib/firehol/link-balancer
+usr/lib/firehol/vnetbuild     usr/libexec/firehol
+usr/lib/firehol/update-ipsets usr/libexec/firehol
+usr/lib/firehol/link-balancer usr/libexec/firehol
 usr/share/doc/firehol/contrib/dnsbl-ipset.sh usr/share/doc/firehol-tools/examples/contrib
+usr/share/doc/firehol/contrib/ipset-apply.sh usr/share/doc/firehol-tools/examples/contrib
 debian/adhoc/contrib/README.firehol-tools    usr/share/doc/firehol-tools/examples/contrib

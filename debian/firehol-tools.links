@@ -1,4 +1,4 @@
-usr/lib/firehol/vnetbuild usr/sbin/vnetbuild
-usr/lib/firehol/update-ipsets usr/sbin/update-ipsets
-usr/lib/firehol/link-balancer usr/sbin/link-balancer
+usr/libexec/firehol/vnetbuild usr/sbin/vnetbuild
+usr/libexec/firehol/update-ipsets usr/sbin/update-ipsets
+usr/libexec/firehol/link-balancer usr/sbin/link-balancer
 usr/share/doc/firehol-tools/examples/contrib usr/share/doc/firehol-tools/contrib

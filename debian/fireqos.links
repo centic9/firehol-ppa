@@ -1,2 +1,3 @@
-usr/lib/firehol/fireqos usr/sbin/fireqos
+usr/libexec/firehol/fireqos usr/sbin/fireqos
+usr/lib/firehol/services.fireqos usr/libexec/firehol/services.fireqos
 usr/share/doc/fireqos/examples/contrib usr/share/doc/fireqos/contrib

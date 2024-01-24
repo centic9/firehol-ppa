@@ -6,9 +6,43 @@ get started; to enable it set START_FIREHOL to anything
 else than NO/no.
 
 Variables set into /etc/default/firehol are exported into
-by the init script /etc/init.d/firehol, such that they are
+by the initscript /etc/init.d/firehol, such that they are
 carried out when firehol is launched from it while, otherwise,
 they are generally ignored.
+
+Handling FireHOL with ifupdowm-like machineries
+===============================================
+
+FireHOL is meant to be handled by a third-party software
+like ifupdown (interfaces(5)) when the initscript parameter
+START_FIREHOL is set to AUTO/auto. For now only the necessary
+ifupdown material is provided. The FireHOL configuration file
+/usr/share/doc/firehol/examples/ifupdown/firehol-ifupdown.conf
+(distributed in the documentation package firehol-doc) exemplifies
+the usage of this scheme with ifupdown and might be used as a template.
+
+To be fully functional with the provided ifupdown material,
+the actual FireHOL configuration /etc/firehol/firehol.conf file
+must be marked/stamped as IFUPDOWN_COMPATIBLE_FIREHOL_CONFIG_FILE.
+This is done by putting the entire ``word''
+	IFUPDOWN_COMPATIBLE_FIREHOL_CONFIG_FILE
+somewhere inside a comment. In the aforementioned example,
+this marker was placed in the very first line of the file as follows:
+
+==8><---------------------------------------------------------------
+## firehol.conf IFUPDOWN_COMPATIBLE_FIREHOL_CONFIG_FILE example
+---------------------------------------------------------------><8==
+
+This maker is the guarantee by the system administrators that the
+FireHOL configuration file handles the ifupdowm MODE stop properly.
+When the maker is not matched, firehol is dictated to stop normally.
+For further information and details, you may want to peruse interfaces(5)
+and have a look to /etc/firehol/ifupdown-firehol.sh .
+
+From a technical perspective, the scheme START_FIREHOL=AUTO neutralizes the
+start and stop behaviours (commands) in the initscript /etc/init.d/firehol .
+For this reason, the new behaviours force-start and force-stop have been
+introduced to force the start and stop behaviours, respectively.
 
 
 Log FireHOL messages to a separate log file with rsyslog [1]
@@ -68,4 +102,4 @@ some manual interventions and material related to FireHOL might be forced
 to use iptables-legacy(8) instead of iptables-nft(8).
 
 
- -- Jerome Benoit <calculus@rezozer.net>  Fri, 08 May 2020 15:26:18 +0000
+ -- Jerome Benoit <calculus@rezozer.net>  Fri, 24 Jan 2024 17:19:23 +0000

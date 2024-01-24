@@ -1,16 +1,27 @@
 # FireHOL application default file
 # sourced by the initscript `/etc/init.d/firehol'.
 #
+
+# START_FIREHOL(=NO|AUTO|YES) init script variable:
+# - to disable firehol at startup set START_FIREHOL=NO (default)
+START_FIREHOL=NO
+# - to handle firehol with a third-party machinery (like ifupdown)
+# set START_FIREHOL=AUTO . This scheme empties the WAIT_FOR_IFACE
+# list (see below)
+#START_FIREHOL=AUTO
+# - to effectively start firehol at startup set START_FIREHOL=YES
+#START_FIREHOL=YES
+
+
+#
 # See firehol-variables(5) manual page or FireHOL Manual
 # for the full list of exportable variables that control the
 # behaviour of FireHOL and their respective description.
 #
 
-# To enable firehol at startup set START_FIREHOL=YES (init script variable)
-START_FIREHOL=NO
-
 # If you want to have firehol wait for an iface to be up add it here
 WAIT_FOR_IFACE=""
+# This list is set to the empty list in the START_FIREHOL=AUTO scheme.
 
 # Disallow pre-established traffic to continue whilst the firewall is activated
 FIREHOL_ESTABLISHED_ACTIVATION_ACCEPT=0

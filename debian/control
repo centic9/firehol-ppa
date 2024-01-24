@@ -4,7 +4,7 @@ Priority: optional
 Maintainer: Jerome Benoit <calculus@rezozer.net>
 Rules-Requires-Root: no
 Build-Depends:
- debhelper-compat (= 12),
+ debhelper-compat (= 13),
 Build-Depends-Indep:
  libxml2-utils,
  texlive-base,
@@ -18,7 +18,7 @@ Build-Depends-Indep:
  procps,
  curl, wget, whois, jq, unzip, git, graphviz,
  screen
-Standards-Version: 4.5.1
+Standards-Version: 4.6.2
 Homepage: https://firehol.org
 Vcs-Git: https://salsa.debian.org/debian/firehol.git
 Vcs-Browser: https://salsa.debian.org/debian/firehol
@@ -28,7 +28,7 @@ Architecture: all
 Replaces: firehol-doc (<< 3.1.5+ds1-1)
 Breaks: firehol-doc (<< 3.1.5+ds1-1)
 Pre-Depends: ${misc:Pre-Depends}
-Depends: firehol-common (= ${binary:Version}), lsb-base, ${misc:Depends}
+Depends: firehol-common (= ${binary:Version}), ${misc:Depends}
 Recommends: fireqos (= ${binary:Version})
 Suggests: firehol-tools (= ${binary:Version}), firehol-doc (= ${binary:Version}), ulogd2
 Description: easy to use but powerful iptables stateful firewall (program)
@@ -49,6 +49,7 @@ Breaks: firehol (<< 3.0.1+ds-2)
 Depends: ${misc:Depends}
 Suggests: pdf-viewer, www-browser
 Enhances: firehol (= ${binary:Version})
+Multi-Arch: foreign
 Description: easy to use but powerful iptables stateful firewall (docs)
  FireHOL generates generic firewalls with an extremely simple but powerful
  configuration language based on bash, enabling you to design any kind of
@@ -64,7 +65,7 @@ Architecture: all
 Replaces: fireqos-doc (<< 3.1.5+ds1-1)
 Breaks: fireqos-doc (<< 3.1.5+ds1-1)
 Pre-Depends: ${misc:Pre-Depends}
-Depends: firehol-common (= ${binary:Version}), lsb-base, ${misc:Depends}
+Depends: firehol-common (= ${binary:Version}), ${misc:Depends}
 Recommends: firehol (= ${binary:Version})
 Suggests: firehol-tools (= ${binary:Version}), fireqos-doc (= ${binary:Version})
 Description: easy to use but powerful traffic shaping tool (program)
@@ -85,6 +86,7 @@ Breaks: fireqos (<< 3.0.1+ds-2)
 Depends: ${misc:Depends}
 Suggests: pdf-viewer, www-browser
 Enhances: fireqos (= ${binary:Version})
+Multi-Arch: foreign
 Description: easy to use but powerful traffic shaping tool (docs)
  FireQOS generates generic traffic shapers with an extremely simple but
  powerful configuration language based on bash, enabling you to design
@@ -122,6 +124,7 @@ Breaks: firehol-tools (<< 3.0.1+ds-2)
 Depends: ${misc:Depends}
 Suggests: pdf-viewer, www-browser
 Enhances: firehol-tools (= ${binary:Version})
+Multi-Arch: foreign
 Description: easy to use but powerful traffic suite (extra tools docs)
  FireHOL suite is a powerful traffic suite of tools that generate generic
  firewalls, traffic shappers, and  more with an extremely simple but powerful
@@ -133,7 +136,7 @@ Description: easy to use but powerful traffic suite (extra tools docs)
 Package: firehol-common
 Architecture: all
 Depends:
- lsb-base, kmod,
+ kmod,
  iptables (>= 1.8.2),
  iproute2, ipset, iprange, nfacct, tcpdump,
  inetutils-ping | iputils-ping , traceroute, procps,

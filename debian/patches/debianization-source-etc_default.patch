@@ -2,26 +2,40 @@ Description: debianization: defaults
  Meant to take into account /etc/defaults
  in order to avoid security surprises.
  Thanks to Toni Mueller <toni@debian.org>
- for pointing out the issue and providing
- a patch.
+ for pointing out the issue and introducing
+ the patch.
 Origin: vendor, Debian
 Forwarded: not-needed
 Author: Toni Mueller <toni@debian.org>
-Last-Update: 2020-05-08
+Author: Jerome Benoit <calculus@debian.org>
+Last-Update: 2024-01-24
 
 --- a/sbin/firehol
 +++ b/sbin/firehol
-@@ -24,6 +24,15 @@
+@@ -24,6 +24,28 @@
  #
  #       See the file COPYING for details.
  #
++START_FIREHOL=NO
 +if [ -r /etc/default/firehol ]; then
 +	source /etc/default/firehol
-+	if [ ${START_FIREHOL:-NO} != YES ]; then
-+		1>&2 echo "FireHOL needs to be enabled in /etc/default/firehol in order to run."
-+		1>&2 echo "Not starting - your system may be unprotected!"
-+		exit 1
-+	fi
++	case "$START_FIREHOL" in
++		NO|no)
++			START_FIREHOL=NO
++			;;
++		AUTO|auto)
++			WAIT_FOR_IFACE=""
++			START_FIREHOL=AUTO
++			;;
++		*)
++			START_FIREHOL=YES
++			;;
++	esac
++fi
++if [ "${START_FIREHOL}" = "NO" ]; then
++	1>&2 echo "FireHOL needs to be enabled in /etc/default/firehol in order to run."
++	1>&2 echo "Not starting - your system may be unprotected!"
++	exit 1
 +fi
 +#
  READLINK_CMD=${READLINK_CMD:-readlink}

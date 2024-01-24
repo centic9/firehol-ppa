@@ -1,3 +1,18 @@
+firehol (3.1.7+ds-3) unstable; urgency=medium
+
+  Now the firehol package allows one to handle FireHOL via a third party-
+  package like ifupdown. To enable this new scheme firehol 3.1.7+ds-3 added
+  a third possible value for the initscript parameter START_FIREHOL, AUTO/auto.
+  This parameter must be set up in /etc/default/firehol. This package also
+  added scripts meant to act along the ifupdown machinery (interface(5)). The
+  conf file /usr/share/doc/firehol/examples/ifupdown/firehol-ifupdown.conf
+  examplifies the usage of this scheme and might be used as a template;
+  this example is distributed with the firehol-doc package. In other words,
+  this new scheme START_FIREHOL=(AUTO|auto) brings to FireHOL the fine
+  granuality offered by ifupdown (see interfaces(5)).
+
+ -- Jerome Benoit <calculus@rezozer.net>  Tue, 25 Jan 2024 11:19:01 +0000
+
 firehol (2.0.0~rc.1+ds-1) experimental; urgency=medium
 
   IPv6 is supported, from this major release of FireHOL, besides IPv4.

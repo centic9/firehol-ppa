@@ -1,2 +1,7 @@
-usr/lib/firehol/firehol usr/sbin/firehol
+etc/firehol/ifupdown-firehol.sh etc/network/if-pre-up.d/zz-firehol
+etc/firehol/ifupdown-firehol.sh etc/network/if-up.d/firehol
+etc/firehol/ifupdown-firehol.sh etc/network/if-down.d/firehol
+etc/firehol/ifupdown-firehol.sh etc/network/if-post-down.d/00-firehol
+usr/libexec/firehol/firehol usr/sbin/firehol
+usr/lib/firehol/services.firehol usr/libexec/firehol/services.firehol
 usr/share/doc/firehol/examples/contrib usr/share/doc/firehol/contrib
