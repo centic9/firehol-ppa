@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 #####################################################################
 ## Purpose
@@ -69,10 +69,10 @@ START_FIREHOL=NO
 export START_FIREHOL
 if [ -r /etc/default/firehol ]; then
 	if [ -o allexport ]; then
-		. /etc/default/firehol
+		source /etc/default/firehol
 	else
 		set -a
-		. /etc/default/firehol
+		source /etc/default/firehol
 		set +a
 	fi
 fi
