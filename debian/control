@@ -18,7 +18,7 @@ Build-Depends-Indep:
  procps,
  curl, wget, whois, jq, unzip, git, graphviz,
  screen
-Standards-Version: 4.6.2
+Standards-Version: 4.7.2
 Homepage: https://firehol.org
 Vcs-Git: https://salsa.debian.org/debian/firehol.git
 Vcs-Browser: https://salsa.debian.org/debian/firehol

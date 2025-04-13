@@ -1,4 +1,6 @@
+fix-upstream-doc-confusing_quotes.patch
 debianization.patch
 debianization-usrmerge-transition.patch
 debianization-iptables-legacy.patch
 debianization-source-etc_default.patch
+debianization-documentation-HTML_format-checks-skip.patch

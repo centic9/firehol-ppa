@@ -1,3 +1,37 @@
+firehol (3.1.8+ds-1) unstable; urgency=medium
+
+  * New upstream patch version.
+  * Debianization:
+    - d/patches/*:
+      - d/p/fix-upstream-doc-confusing_quotes.patch, introduce;
+      - d/p/debianization-documentation-HTML_format-checks-skip.patch,
+        introduce as workaround.
+
+ -- Jerome Benoit <calculus@rezozer.net>  Sun, 13 Apr 2025 18:37:59 +0000
+
+firehol (3.1.7+ds-6) unstable; urgency=low
+
+  [ Jerome Benoit ]
+  * Update copyright year-tuples.
+  * Refresh d/watch and the Files-Excluded list.
+  * Bump Standards-Version to 4.7.2 (no change).
+  * Correct technical typo in d/firehol-tools.lintian-overrides .
+
+  [ Moritz Schlarb ]
+  * Make pdf generation for docs reproducible (Closes: #1090078).
+  * Add CI.
+
+ -- Jerome Benoit <calculus@rezozer.net>  Sun, 13 Apr 2025 14:09:52 +0000
+
+firehol (3.1.7+ds-5) unstable; urgency=medium
+
+  * Debianization:
+    - START_FIREHOL=AUTO scheme, minor corrections;
+    - d/control:
+      - Standards-Version, bump to 4.7.0 (no change).
+
+ -- Jerome Benoit <calculus@rezozer.net>  Sun, 22 Sep 2024 12:25:45 +0000
+
 firehol (3.1.7+ds-4) unstable; urgency=medium
 
   * Debianization:

@@ -1,0 +1,43 @@
+Description: debianization-documentaion: HTML format: checks: skip
+ Skip post-genration checks for the HTML docs as they fail whereas
+ the gnerated HTML is readable by humans. This patch is a Debian
+ specific patch which may depend on the used versions of pandoc
+ (or xmllint).
+Origin: vendor, Debian
+Forwarded: not-needed
+Author: Jerome Benoit <calculus@rezozer.net>
+Last-Update: 2025-04-13
+
+--- a/doc/tools/pandoc-post.in
++++ b/doc/tools/pandoc-post.in
+@@ -103,18 +103,18 @@
+         # Validate tags
+ 	$XMLLINT $XMLLINT_FLAGS --html "$filename" > $MYTMP/verify.html
+ 
+-        # Reformat so we can identify internal sections
+-	$XMLLINT $XMLLINT_FLAGS --format "$filename" > $MYTMP/format.html
+-
+-        # Fixup some whitespace formatting damage done by xmllint
+-        # - if line ends in a pre
+-        #   N = join next line, then remove newline and finally excess spaces
+-        $SED -i -e '/<pre>$/{N;s/\n//;s/<pre> *<code>/<pre><code>/}' \
+-                -e '/<\/code>$/{N;s/\n//;s:</code> *</pre>:</code></pre>:}' \
+-             $MYTMP/format.html
+-        # Remove manpage internal sections from HTML (several levels down)
+-	$SED -e '/^                  <ul>/,/^                  <\/ul>/d' $MYTMP/format.html > "$filename"
+-        :
++##        # Reformat so we can identify internal sections
++##	$XMLLINT $XMLLINT_FLAGS --format "$filename" > $MYTMP/format.html
++##
++##        # Fixup some whitespace formatting damage done by xmllint
++##        # - if line ends in a pre
++##        #   N = join next line, then remove newline and finally excess spaces
++##        $SED -i -e '/<pre>$/{N;s/\n//;s/<pre> *<code>/<pre><code>/}' \
++##                -e '/<\/code>$/{N;s/\n//;s:</code> *</pre>:</code></pre>:}' \
++##             $MYTMP/format.html
++##        # Remove manpage internal sections from HTML (several levels down)
++##	$SED -e '/^                  <ul>/,/^                  <\/ul>/d' $MYTMP/format.html > "$filename"
++##        :
+       ;;
+ 
+       man)

@@ -1,0 +1,20 @@
+Description: fix: upstream doc: confusing quotes
+ Quote a couple of double-quotes with single quotes
+ to avoid pandoc (3.1.11.1) confusion.
+ This patch might be a workaround but not solid fix.
+Origin: vendor, Debian
+Forwarded: https://github.com/firehol/firehol/pull/508
+Author: Jerome Benoit <calculus@rezozer.net>
+Last-Update: 2025-04-13
+
+--- a/doc/services-db.data
++++ b/doc/services-db.data
+@@ -288,7 +288,7 @@
+ 		    interface eth0 dhcp
+ 		      policy return
+ 		      server dhcp accept
+-		    interface eth0 lan src "$mylan" dst "$myip"
++		    interface eth0 lan src `"$mylan"` dst `"$myip"`
+ 		      client all accept
+ 		-
+ 		This service implicitly sets its client or server to ipv4 mode.

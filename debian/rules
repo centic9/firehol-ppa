@@ -28,3 +28,11 @@ override_dh_compress:
 
 override_dh_missing:
 	dh_missing --list-missing
+
+## From https://wiki.debian.org/ReproducibleBuilds/TimestampsInPDFGeneratedByLaTeX
+## -- Moritz Schlarb <schlarbm@uni-mainz.de>  Mon, 16 Dec 2024 10:10:28 +0100
+execute_before_dh_install:
+	for pdf in debian/tmp/usr/share/doc/firehol/*.pdf; do \
+		grep -av '^/ID \[\(<[0-9A-F]\{32\}>\) \1]$$' $$pdf > $$pdf.without_pdf_id; \
+		mv -f $$pdf.without_pdf_id $$pdf; \
+	done

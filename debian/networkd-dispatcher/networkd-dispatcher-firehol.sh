@@ -37,27 +37,21 @@ DESC="Firewall"
 
 test -x $DAEMON || exit 0
 
-if [ -n "$IF_IFUPDOWN_FIREHOL_MAINT_DEBUG" ]; then
-	if [ -z "$MODE" -o -z "$PHASE" ]; then
+if [ -n "$IF_NETWORKD_FIREHOL_MAINT_DEBUG" ]; then
+	if [ -z "$STATE" ]; then
 		case $(dirname "$0") in
-			*/if-pre-up.d)
-					PHASE=pre-up;
-			    MODE=start;
+			*/routable.d)
+			    STATE=routable;
 			    ;;
-			*/if-up.d)
-					PHASE=post-up;
-			    MODE=start;
+			*/off.d)
+			    STATE=off;
 			    ;;
-			*/if-down.d)
-					PHASE=pre-down;
-			    MODE=stop;
-			    ;;
-			*/if-post-down.d)
-					PHASE=post-down;
-			    MODE=stop;
+			*)
+			    STATE=unexpected;
 			    ;;
 		esac
 	fi
+	export STATE
 	set -x
 fi
 
@@ -81,40 +75,28 @@ case "$START_FIREHOL" in
 	*) exit 0 ;;
 esac
 
-ifud_firehol_do_forceload () {
+nwdd_firehol_do_forceload () {
 	/usr/sbin/firehol start > /dev/null 2>&1
 	}
 
-ifud_firehol_do_forcestop () {
+nwdd_firehol_do_forcestop () {
 	/usr/sbin/firehol stop > /dev/null 2>&1
 	}
 
-case "$PHASE" in
-	pre-up|post-down)
+case "$STATE" in
+	routable)
+		nwdd_firehol_do_forceload
 		;;
-	post-up|pre-down)
-		exit 0
-		;;
-	*)
-		echo "$0: unkexpected PHASE [$PHASE]" >&2
-		exit 1
-		;;
-esac
-
-case "$MODE" in
-	start)
-		ifud_firehol_do_forceload
-		;;
-	stop)
-		if $(grep -sqm1 '#.*\<IFUPDOWN_COMPATIBLE_FIREHOL_CONFIG_FILE\>' /etc/firehol/firehol.conf)
+	off)
+		if $(grep -sqm1 '#.*\<NETWORKD_COMPATIBLE_FIREHOL_CONFIG_FILE\>' /etc/firehol/firehol.conf)
 		then
-			ifud_firehol_do_forceload
+			nwdd_firehol_do_forceload
 		else
-			ifud_firehol_do_forcestop
+			nwdd_firehol_do_forcestop
 		fi
 		;;
 	*)
-		echo "$0: unexpected MODE [$MODE]" >&2
+		echo "$0: unexpected STATE [$STATE]" >&2
 		exit 1
 		;;
 esac
