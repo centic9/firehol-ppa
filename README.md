@@ -6,6 +6,53 @@ http://firehol.org/
     FireHOL, an iptables stateful packet filtering firewall for humans!
     FireQOS, a TC based bandwidth shaper for humans!
 
+Git
+===
+These instructions are for people who are working with the git repository.
+There are more general instructions starting with
+[Upgrade Notes](#upgrade-notes).
+
+Cloning Git Repository
+----------------------
+
+The [github firehol repository page](https://github.com/firehol/firehol)
+lists URLs which can be used to clone the repository.
+
+After cloning you should copy the git hooks, for style checking and more:
+
+~~~~
+cp hooks/* .git/hooks
+~~~~
+
+Building Git Repository
+-----------------------
+You need [GNU autoconf](http://www.gnu.org/software/autoconf/) and
+[GNU automake](http://www.gnu.org/software/automake/) to be able to
+run:
+
+~~~~
+./autogen.sh
+./configure --enable-maintainer-mode
+make
+make install
+~~~~
+
+If you don't want to have to install pandoc you can instead choose
+to build without documentation or manpages:
+
+~~~~
+./autogen.sh
+./configure --disable-doc --disable-man
+make
+make install
+~~~~
+
+Re-run `autogen.sh` whenever you change `configure.ac` or a `Makefile.am`
+
+You can run the `sbin/*` scripts in-situ provided you have done the
+`configure` and `make` steps.
+
+
 Upgrade Notes
 =============
 From version 2.0.0-pre6, FireHOL adds combined IPv4/IPv6 support within

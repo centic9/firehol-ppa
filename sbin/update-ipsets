@@ -267,6 +267,25 @@ ipset_verbose() {
 	fi
 }
 
+ipset_retry() {
+	if [ -z "${IPSET_NUM_RETRIES}" ]; then
+		IPSET_NUM_RETRIES=10
+	fi
+
+	declare -r RETRY_PAUSE=1
+
+	for i in $(${SEQ_CMD} ${IPSET_NUM_RETRIES}); do
+		ipset_verbose "" "Executing ${IPSET_CMD} (Try #${i}/${IPSET_NUM_RETRIES})..."
+		(${IPSET_CMD} $@) && return 0
+		ipset_warning "" "Executing ${IPSET_CMD} failed (Try #${i}/${IPSET_NUM_RETRIES}). Retrying in $RETRY_PAUSE seconds..."
+		${SLEEP_CMD} ${RETRY_PAUSE}
+	done
+
+	ipset_error "Executing ${IPSET_CMD} failed even after ${NUM_RETRIES} retries"
+
+	return 1
+}
+
 # -----------------------------------------------------------------------------
 # find a working iprange command
 
@@ -916,7 +935,7 @@ touch_in_the_past $[7 * 24 * 60] "${RUN_DIR}/.warn_if_last_downloaded_before_thi
 ipset_list_names() {
 	if [ ${IPSETS_APPLY} -eq 1 ]
 		then
-		( $IPSET_CMD --list -t || $IPSET_CMD --list ) | $GREP_CMD "^Name: " | $CUT_CMD -d ' ' -f 2
+		( ipset_retry --list -t || ipset_retry --list ) | $GREP_CMD "^Name: " | $CUT_CMD -d ' ' -f 2
 		return $?
 	fi
 	return 0
@@ -1139,7 +1158,7 @@ download_manager() {
 	[ -z "${IPSET_CHECKED_DATE[${ipset}]}"      ] && IPSET_CHECKED_DATE[${ipset}]=0
 	[ -z "${IPSET_DOWNLOAD_FAILURES[${ipset}]}" ] && IPSET_DOWNLOAD_FAILURES[${ipset}]=0
 
-	# nunber of consecutive failures so far
+	# number of consecutive failures so far
 	fails=${IPSET_DOWNLOAD_FAILURES[${ipset}]}
 	base=${IPSET_CHECKED_DATE[${ipset}]}
 	if [ ${IGNORE_LASTCHECKED} -eq 1 ]
@@ -2422,7 +2441,7 @@ ipset_apply() {
 		if [ -z "${sets[$ipset]}" ]
 			then
 			ipset_saved "${ipset}" "no need to load ipset in kernel"
-			# $IPSET_CMD --create ${ipset} "${hash}hash" || return 1
+			# ipset_retry --create ${ipset} "${hash}hash" || return 1
 			return 0
 		fi
 
@@ -2461,7 +2480,7 @@ ipset_apply() {
 			opts="maxelem ${entries}"
 		fi
 
-		$IPSET_CMD create "${tmpname}" ${hash}hash ${opts}
+		ipset_retry create "${tmpname}" ${hash}hash ${opts}
 		if [ $? -ne 0 ]
 			then
 			ipset_error "${ipset}" "failed to create temporary ipset ${tmpname}"
@@ -2469,22 +2488,22 @@ ipset_apply() {
 			return 1
 		fi
 
-		$IPSET_CMD --flush "${tmpname}"
-		$IPSET_CMD --restore <"${RUN_DIR}/${tmpname}"
+		ipset_retry --flush "${tmpname}"
+		ipset_retry --restore <"${RUN_DIR}/${tmpname}"
 		ret=$?
 		$RM_CMD "${RUN_DIR}/${tmpname}"
 
 		if [ ${ret} -ne 0 ]
 			then
 			ipset_error "${ipset}" "failed to restore ipset from ${tmpname}"
-			$IPSET_CMD --destroy "${tmpname}"
+			ipset_retry --destroy "${tmpname}"
 			return 1
 		fi
 
 		ipset_info "${ipset}" "swapping temporary ipset to production"
-		$IPSET_CMD --swap "${tmpname}" "${ipset}"
+		ipset_retry --swap "${tmpname}" "${ipset}"
 		ret=$?
-		$IPSET_CMD --destroy "${tmpname}"
+		ipset_retry --destroy "${tmpname}"
 		if [ $? -ne 0 ]
 			then
 			ipset_error "${ipset}" "failed to destroy temporary ipset"
@@ -2559,7 +2578,7 @@ ipset_attributes() {
 }
 
 # -----------------------------------------------------------------------------
-# finalize() is called when a successful download and convertion completes
+# finalize() is called when a successful download and conversion completes
 # to update the ipset in the kernel and possibly commit it to git
 finalize() {
 	local 	ipset="${1}" tmp="${2}" \
@@ -2925,7 +2944,7 @@ update() {
 	# if the .split file exists, create 2 ipsets, one for IPs and one for subnets
 	if [ "${limit}" = "split" -o \( -z "${limit}" -a -f "${BASE_DIR}/${ipset}.split" \) ]
 	then
-		ipset_info "${ipset}" "spliting IPs and subnets..."
+		ipset_info "${ipset}" "splitting IPs and subnets..."
 		test -f "${BASE_DIR}/${ipset}_ip.source" && $RM_CMD "${BASE_DIR}/${ipset}_ip.source"
 		test -f "${BASE_DIR}/${ipset}_net.source" && $RM_CMD "${BASE_DIR}/${ipset}_net.source"
 		(
@@ -3286,7 +3305,6 @@ rename_ipset ib_pedophiles iblocklist_pedophiles
 rename_ipset ib_cruzit_web_attacks iblocklist_cruzit_web_attacks
 rename_ipset ib_yoyo_adservers iblocklist_yoyo_adservers
 rename_ipset ib_spamhaus_drop iblocklist_spamhaus_drop
-rename_ipset ib_abuse_zeus iblocklist_abuse_zeus
 rename_ipset ib_abuse_spyeye iblocklist_abuse_spyeye
 rename_ipset ib_abuse_palevo iblocklist_abuse_palevo
 rename_ipset ib_ciarmy_malicious iblocklist_ciarmy_malicious
@@ -4786,18 +4804,12 @@ delete_ipset openbl_all
 
 # Top 20 attackers (networks) by www.dshield.org
 update dshield 10 "$[24*60] $[7*24*60] $[30*24*60]" ipv4 both \
-	"http://feeds.dshield.org/block.txt" \
+	"https://feeds.dshield.org/block.txt" \
 	dshield_parser \
 	"attacks" \
 	"[DShield.org](https://dshield.org/) top 20 attacking class C (/24) subnets over the last three days" \
 	"DShield.org" "https://dshield.org/"
 
-update dshield_top_1000 60 0 ipv4 ip \
-	"https://isc.sans.edu/api/sources/attacks/1000/" \
-	parse_dshield_api \
-	"attacks" \
-	"[DShield.org](https://dshield.org/) top 1000 attacking hosts in the last 30 days" \
-	"DShield.org" "https://dshield.org/"
 
 # -----------------------------------------------------------------------------
 # TOR lists
@@ -5050,32 +5062,6 @@ update blocklist_de_bruteforce 15 0 ipv4 ip \
 
 
 # -----------------------------------------------------------------------------
-# Zeus trojan
-# https://zeustracker.abuse.ch/blocklist.php
-# by abuse.ch
-
-# This blocklists only includes IPv4 addresses that are used by the ZeuS trojan.
-update zeus_badips 30 0 ipv4 ip \
-	"https://zeustracker.abuse.ch/blocklist.php?download=badips" \
-	remove_comments \
-	"malware" \
-	"[Abuse.ch Zeus tracker](https://zeustracker.abuse.ch) badips includes IPv4 addresses that are used by the ZeuS trojan. It is the recommened blocklist if you want to block only ZeuS IPs. It excludes IP addresses that ZeuS Tracker believes to be hijacked (level 2) or belong to a free web hosting provider (level 3). Hence the false postive rate should be much lower compared to the standard ZeuS IP blocklist." \
-	"Abuse.ch" "https://zeustracker.abuse.ch/" \
-	can_be_empty
-
-# This blocklist contains the same data as the ZeuS IP blocklist (BadIPs)
-# but with the slight difference that it doesn't exclude hijacked websites
-# (level 2) and free web hosting providers (level 3).
-update zeus 30 0 ipv4 ip \
-	"https://zeustracker.abuse.ch/blocklist.php?download=ipblocklist" \
-	remove_comments \
-	"malware" \
-	"[Abuse.ch Zeus tracker](https://zeustracker.abuse.ch) standard, contains the same data as the ZeuS IP blocklist (zeus_badips) but with the slight difference that it doesn't exclude hijacked websites (level 2) and free web hosting providers (level 3). This means that this blocklist contains all IPv4 addresses associated with ZeuS C&Cs which are currently being tracked by ZeuS Tracker. Hence this blocklist will likely cause some false positives." \
-	"Abuse.ch" "https://zeustracker.abuse.ch/" \
-	can_be_empty
-
-
-# -----------------------------------------------------------------------------
 # Palevo worm
 # https://palevotracker.abuse.ch/blocklists.php
 # by abuse.ch
@@ -5100,7 +5086,7 @@ delete_ipset palevo
 # and steal sensitive information from the victims computer, such as credit card
 # details or credentials.
 update feodo 30 0 ipv4 ip \
-	"https://feodotracker.abuse.ch/blocklist/?download=ipblocklist" \
+	"https://feodotracker.abuse.ch/downloads/ipblocklist_recommended.txt" \
 	remove_comments \
 	"malware" \
 	"[Abuse.ch Feodo tracker](https://feodotracker.abuse.ch) trojan includes IPs which are being used by Feodo (also known as Cridex or Bugat) which commits ebanking fraud" \
@@ -5108,7 +5094,7 @@ update feodo 30 0 ipv4 ip \
 	can_be_empty
 
 update feodo_badips 30 0 ipv4 ip \
-	"https://feodotracker.abuse.ch/blocklist/?download=badips" \
+	"https://feodotracker.abuse.ch/downloads/ipblocklist.txt" \
 	remove_comments \
 	"malware" \
 	"[Abuse.ch Feodo tracker BadIPs](https://feodotracker.abuse.ch) The Feodo Tracker Feodo BadIP Blocklist only contains IP addresses (IPv4) used as C&C communication channel by the Feodo Trojan version B. These IP addresses are usually servers rented by cybercriminals directly and used for the exclusive purpose of hosting a Feodo C&C server. Hence you should expect no legit traffic to those IP addresses. The site highly recommends you to block/drop any traffic towards any Feodo C&C using the Feodo BadIP Blocklist. Please consider that this blocklist only contains IP addresses used by version B of the Feodo Trojan. C&C communication channels used by version A, version C and version D are not covered by this blocklist." \
@@ -5689,7 +5675,7 @@ update turris_greylist $[7 * 24 * 60] 0 ipv4 ip \
 	"https://www.turris.cz/greylist-data/greylist-latest.csv" \
 	parse_turris_greylist \
 	"reputation" \
-	"[Turris Greylist](https://www.turris.cz/en/greylist) IPs that are blocked on the firewalls of Turris routers. The data is processed and clasified every week and behaviour of IP addresses that accessed a larger number of Turris routers is evaluated. The result is a list of addresses that have tried to obtain information about services on the router or tried to gain access to them. We do not recommend to use these data as a list of addresses that should be blocked but it can be used for example in analysis of the traffic in other networks." \
+	"[Turris Greylist](https://www.turris.cz/en/greylist) IPs that are blocked on the firewalls of Turris routers. The data is processed and classified every week and behaviour of IP addresses that accessed a larger number of Turris routers is evaluated. The result is a list of addresses that have tried to obtain information about services on the router or tried to gain access to them. We do not recommend to use these data as a list of addresses that should be blocked but it can be used for example in analysis of the traffic in other networks." \
 	"Turris" "https://www.turris.cz/en/greylist"
 
 
@@ -5855,18 +5841,6 @@ update talosintel_ipfilter 15 0 ipv4 ip \
 	"attacks" \
 	"[TalosIntel.com](http://talosintel.com/additional-resources/) List of known malicious network threats" \
 	"TalosIntel.com" "http://talosintel.com/"
-
-# -----------------------------------------------------------------------------
-# NiX Spam
-# http://www.heise.de/ix/NiX-Spam-DNSBL-and-blacklist-for-download-499637.html
-
-update nixspam 15 0 ipv4 ip \
-	"http://www.dnsbl.manitu.net/download/nixspam-ip.dump.gz" \
-	gz_second_word \
-	"spam" \
-	"[NiX Spam](http://www.heise.de/ix/NiX-Spam-DNSBL-and-blacklist-for-download-499637.html) IP addresses that sent spam in the last hour - automatically generated entries without distinguishing open proxies from relays, dialup gateways, and so on. All IPs are removed after 12 hours if there is no spam from there." \
-	"NiX Spam" "http://www.heise.de/ix/NiX-Spam-DNSBL-and-blacklist-for-download-499637.html"
-
 
 # -----------------------------------------------------------------------------
 # VirBL
@@ -6646,7 +6620,7 @@ update iblocklist_webexploit $[12*60] 0 ipv4 ip \
 	"http://list.iblocklist.com/?list=ghlzqtqxnzctvvajwwag&fileformat=p2p&archiveformat=gz" \
 	p2p_gz_ips \
 	"reputation" \
-	"Web server hack and exploit attempts. IP addresses related to current web server hack and exploit attempts that have been logged or can be found in and cross referenced with other related IP databases. Malicious and other non search engine bots will also be listed here, along with anything found that can have a negative impact on a website or webserver such as proxies being used for negative SEO hijacks, unauthorised site mirroring, harvesting, scraping, snooping and data mining / spy bot / security & copyright enforcement companies that target and continuosly scan webservers." \
+	"Web server hack and exploit attempts. IP addresses related to current web server hack and exploit attempts that have been logged or can be found in and cross referenced with other related IP databases. Malicious and other non search engine bots will also be listed here, along with anything found that can have a negative impact on a website or webserver such as proxies being used for negative SEO hijacks, unauthorised site mirroring, harvesting, scraping, snooping and data mining / spy bot / security & copyright enforcement companies that target and continuously scan webservers." \
 	"iBlocklist.com" "https://www.iblocklist.com/" \
 	dont_redistribute
 
@@ -6804,13 +6778,6 @@ update iblocklist_spamhaus_drop $[12*60] 0 ipv4 both \
 	p2p_gz \
 	"attacks" \
 	"Spamhaus.org DROP (Don't Route Or Peer) list." \
-	"iBlocklist.com" "https://www.iblocklist.com/"
-
-update iblocklist_abuse_zeus $[12*60] 0 ipv4 both \
-	"http://list.iblocklist.com/?list=ynkdjqsjyfmilsgbogqf&fileformat=p2p&archiveformat=gz" \
-	p2p_gz \
-	"malware" \
-	"zeustracker.abuse.ch IP blocklist that contains IP addresses which are currently beeing tracked on the abuse.ch ZeuS Tracker." \
 	"iBlocklist.com" "https://www.iblocklist.com/"
 
 update iblocklist_abuse_spyeye $[12*60] 0 ipv4 both \
@@ -7758,7 +7725,6 @@ merge firehol_level1 ipv4 both \
 	spamhaus_drop \
 	spamhaus_edrop \
 	sslbl \
-	zeus_badips \
 	ransomware_rw \
 
 merge firehol_level2 ipv4 both \
@@ -7776,7 +7742,6 @@ merge firehol_level3 ipv4 both \
 	bruteforceblocker \
 	ciarmy \
 	dshield_30d \
-	dshield_top_1000 \
 	malc0de \
 	maxmind_proxy_fraud \
 	myip \
@@ -7784,7 +7749,6 @@ merge firehol_level3 ipv4 both \
 	snort_ipfilter \
 	sslbl_aggressive \
 	talosintel_ipfilter \
-	zeus \
 	vxvault \
 
 merge firehol_level4 ipv4 both \
