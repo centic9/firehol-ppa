@@ -1,3 +1,9 @@
+firehol (3.1.8+ds-1ubuntu0~ppa1) noble; urgency=medium
+
+  * Backport to Noble
+
+ -- Dominik Stadler (Ubuntu key) <dominik.stadler@gmx.at>  Fri, 01 Aug 2025 19:10:45 +0200
+
 firehol (3.1.8+ds-1) unstable; urgency=medium
 
   * New upstream patch version.
