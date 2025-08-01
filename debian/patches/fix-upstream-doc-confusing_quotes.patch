@@ -7,8 +7,10 @@ Forwarded: https://github.com/firehol/firehol/pull/508
 Author: Jerome Benoit <calculus@rezozer.net>
 Last-Update: 2025-04-13
 
---- a/doc/services-db.data
-+++ b/doc/services-db.data
+Index: git/doc/services-db.data
+===================================================================
+--- git.orig/doc/services-db.data	2025-08-01 20:48:47.642240123 +0200
++++ git/doc/services-db.data	2025-08-01 20:48:47.637240126 +0200
 @@ -288,7 +288,7 @@
  		    interface eth0 dhcp
  		      policy return

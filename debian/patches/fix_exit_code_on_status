@@ -1,8 +1,8 @@
 Index: git/sbin/firehol
 ===================================================================
---- git.orig/sbin/firehol	2021-05-31 20:28:57.504710088 +0200
-+++ git/sbin/firehol	2021-06-16 09:55:46.415138708 +0200
-@@ -10326,7 +10326,12 @@
+--- git.orig/sbin/firehol	2025-08-01 20:49:25.269220745 +0200
++++ git/sbin/firehol	2025-08-01 20:49:25.264220747 +0200
+@@ -10344,7 +10344,12 @@
  		fi
  		) >"${FIREHOL_DIR}/status"
  		${MORE_CMD} <"${FIREHOL_DIR}/status"
@@ -14,5 +14,5 @@ Index: git/sbin/firehol
 +		
 +		exit $RET
  		;;
- 	
+ 
  	panic)
