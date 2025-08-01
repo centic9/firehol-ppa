@@ -32,6 +32,12 @@ firehol (3.1.7+ds-5) unstable; urgency=medium
 
  -- Jerome Benoit <calculus@rezozer.net>  Sun, 22 Sep 2024 12:25:45 +0000
 
+firehol (3.1.7+ds-4ubuntu0~ppa1) noble; urgency=medium
+
+  * Port local changes to Noble
+
+ -- Dominik Stadler (Ubuntu key) <dominik.stadler@gmx.at>  Fri, 11 Oct 2024 11:45:06 +0200
+
 firehol (3.1.7+ds-4) unstable; urgency=medium
 
   * Debianization:
@@ -63,6 +69,24 @@ firehol (3.1.7+ds-3) unstable; urgency=medium
       - copyright year tuples, refresh.
 
  -- Jerome Benoit <calculus@rezozer.net>  Wed, 24 Jan 2024 21:34:39 +0000
+
+firehol (3.1.7+ds-2ubuntu2~ppa2) jammy; urgency=medium
+
+  * Switch to jammy
+
+ -- Dominik Stadler (Ubuntu key) <dominik.stadler@gmx.at>  Sat, 17 Sep 2022 11:10:59 +0200
+
+firehol (3.1.7+ds-2ubuntu2~ppa1) focal; urgency=medium
+
+  * Add a patch to return proper exit-code on 'status'
+
+ -- Dominik Stadler (Ubuntu key) <dominik.stadler@gmx.at>  Wed, 16 Jun 2021 09:56:29 +0200
+
+firehol (3.1.7+ds-2ubuntu1~ppa1) focal; urgency=medium
+
+  * Backport latest version to Focal to get fix for location of iptables.
+
+ -- Dominik Stadler (Ubuntu key) <dominik.stadler@gmx.at>  Mon, 31 May 2021 20:29:11 +0200
 
 firehol (3.1.7+ds-2) unstable; urgency=medium
 
